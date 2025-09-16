@@ -1,0 +1,43 @@
+# Spark-based ETL Docker Image
+FROM bitnami/spark:3.5 as spark-base
+
+# Switch to root for installations
+USER root
+
+# Install Python and system dependencies
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    python3-venv \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for package management
+RUN pip3 install uv
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency files
+COPY pyproject.toml uv.lock* ./
+
+# Create and activate virtual environment, install dependencies
+RUN python3 -m venv /opt/venv && \
+    . /opt/venv/bin/activate && \
+    uv pip install pyspark pyarrow pyiceberg
+
+# Copy source code
+COPY src/ ./src/
+COPY data/ ./data/
+
+# Set environment variables
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONPATH="/app"
+ENV SPARK_HOME="/opt/bitnami/spark"
+ENV PYSPARK_PYTHON="/opt/venv/bin/python"
+
+# Expose Spark UI ports
+EXPOSE 4040 4041
+
+# Default command runs the Spark ETL
+CMD ["python", "-m", "src.etl.spark_etl"]

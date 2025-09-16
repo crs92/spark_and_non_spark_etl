@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  # Spark-based ETL Service
+  spark-etl:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark-etl-service
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - PYTHONPATH=/app
+      - SPARK_MASTER_URL=local[*]
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=iceberg_catalog
+      - POSTGRES_USER=iceberg
+      - POSTGRES_PASSWORD=iceberg123
+    ports:
+      - "4040:4040"  # Spark UI
+      - "4041:4041"  # Spark UI secondary
+    networks:
+      - etl-network
+    depends_on:
+      - minio
+      - postgres
+    profiles:
+      - spark
+
+  # Pythonic ETL Service
+  pythonic-etl:
+    build:
+      context: .
+      dockerfile: Dockerfile.pythonic
+    container_name: pythonic-etl-service
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - PYTHONPATH=/app
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin123
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=iceberg_catalog
+      - POSTGRES_USER=iceberg
+      - POSTGRES_PASSWORD=iceberg123
+    networks:
+      - etl-network
+    depends_on:
+      - minio
+      - postgres
+    profiles:
+      - pythonic
+
+  # MinIO for S3-compatible storage (Iceberg backend)
+  minio:
+    image: minio/minio:latest
+    container_name: minio-iceberg
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin123
+    ports:
+      - "9000:9000"      # MinIO API
+      - "9001:9001"      # MinIO Console
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - etl-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # PostgreSQL for Iceberg catalog
+  postgres:
+    image: postgres:15
+    container_name: postgres-iceberg
+    environment:
+      - POSTGRES_DB=iceberg_catalog
+      - POSTGRES_USER=iceberg
+      - POSTGRES_PASSWORD=iceberg123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - etl-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iceberg"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Spark Master (for distributed testing)
+  spark-master:
+    image: bitnami/spark:3.5
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - "8080:8080"  # Spark Master Web UI
+      - "7077:7077"  # Spark Master
+    volumes:
+      - ./data:/app/data
+    networks:
+      - etl-network
+
+  # Spark Worker
+  spark-worker:
+    image: bitnami/spark:3.5
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2g
+      - SPARK_WORKER_CORES=2
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    volumes:
+      - ./data:/app/data
+    networks:
+      - etl-network
+    depends_on:
+      - spark-master
+
+  # Development environment (for interactive development)
+  dev-env:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: etl-development
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - ./notebooks:/app/notebooks
+    environment:
+      - PYTHONPATH=/app
+    ports:
+      - "8888:8888"  # Jupyter
+    networks:
+      - etl-network
+    depends_on:
+      - minio
+      - postgres
+    profiles:
+      - dev
+
+volumes:
+  minio-data:
+  postgres-data:
+
+networks:
+  etl-network:
+    driver: bridge
