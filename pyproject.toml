@@ -1,0 +1,41 @@
+[project]
+name = "spark_and_non_spark_etl"
+version = "0.1.0"
+authors = [{ name = "Christian Corsetti", email = "c.corsetti@reply.it" }]
+description = "POC comparing Spark-based and non-Spark-based ETL on different data sizes."
+requires-python = ">=3.10"
+dependencies = [
+    "polars",
+    "pyarrow",
+    "pyiceberg",
+    "duckdb",
+    "pyspark", # Include all main dependencies here
+]
+
+[project.optional-dependencies]
+# Dependencies for development (testing, linting, formatting)
+dev = [
+    "ruff",
+    "black",
+    "pre-commit",
+    "pytest",
+    "memory-profiler",
+]
+
+# Configure Ruff (linter and formatter)
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "B", "I", "UP", "C90", "N", "D", "ANN", "S", "A", "COM", "C4", "DTZ", "EM", "EXE", "FA", "ICN", "INP", "PIE", "PT", "Q", "RET", "SIM", "T20", "TID", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "RUF"]
+ignore = []
+exclude = [".venv", "build", "dist"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# Configure Black (formatter)
+[tool.black]
+line-length = 88
+target-version = ["py312"]
