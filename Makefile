@@ -27,13 +27,20 @@ install: ## 📦 Install all project dependencies from pyproject.toml
 	@echo "--- Installing dependencies using uv ---"
 	@uv pip install -e .[dev]
 
-check: ## 🧐 Run static analysis and formatting checks (read-only)
-	@echo "--- Running Ruff linter ---"
-	@ruff check $(SRC_DIR) $(TEST_DIR)
-	@echo "--- Checking formatting with Black ---"
-	@black --check $(SRC_DIR) $(TEST_DIR)
-	@echo "--- Checking formatting with Ruff Formatter ---"
-	@ruff format --check $(SRC_DIR) $(TEST_DIR)
+.PHONY: pre-commit-clean
+pre-commit-clean: ## 🧹 Clean pre-commit cache
+	@echo "--- Cleaning pre-commit cache ---"
+	@uv run pre-commit clean
+	@echo "pre-commit cache cleaned."
+
+.PHONY: check
+check: ## Run code quality tools.
+	@echo "🚀 Linting code: Running pre-commit"
+	@git ls-files -- '*' | xargs uv run pre-commit run --files
+	@echo "🚀 Installing missing types stubs"
+	@uv pip install types-pytz
+	@echo "🚀 Static type checking: Running mypy"
+	@uv run mypy --install-types --non-interactive
 
 format: ## 🎨 Auto-format code using Black and Ruff
 	@echo "--- Formatting with Black ---"

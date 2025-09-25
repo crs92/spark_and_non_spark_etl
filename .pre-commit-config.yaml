@@ -1,19 +1,59 @@
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: "v4.5.0"
     hooks:
-    -   id: check-yaml
-    -   id: end-of-file-fixer
-    -   id: trailing-whitespace
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
 
--   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.0
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    # uv version.
+    rev: 0.6.0
     hooks:
-    -   id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-    -   id: ruff-format
+      - id: uv-lock
 
--   repo: https://github.com/psf/black
-    rev: 24.4.2
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: "v0.4.2"
     hooks:
-    -   id: black
+      - id: ruff
+        args: [ --fix ]
+
+  - repo: https://github.com/jsh9/pydoclint
+    rev: "0.5.6"
+    hooks:
+      - id: pydoclint
+        args: [ --style=google, --allow-init-docstring=True]
+
+  - repo: https://github.com/psf/black
+    rev: "23.12.1"
+    hooks:
+      - id: black
+        args:
+          - --preview
+
+  - repo: https://github.com/PyCQA/docformatter
+    rev: "v1.7.7"
+    hooks:
+      - id: docformatter
+        additional_dependencies: [tomli]
+        args: [--in-place, --config, ./pyproject.toml]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [ commit-msg ]
+        args: [ --strict, feat, fix, chore, test, refactor, style, docs, build ]

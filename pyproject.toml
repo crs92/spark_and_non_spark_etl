@@ -10,6 +10,7 @@ dependencies = [
     "pyiceberg",
     "duckdb",
     "pyspark", # Include all main dependencies here
+    "faker",
 ]
 
 [project.optional-dependencies]
@@ -20,22 +21,67 @@ dev = [
     "pre-commit",
     "pytest",
     "memory-profiler",
+    "mypy",
 ]
 
 # Configure Ruff (linter and formatter)
 [tool.ruff]
 line-length = 88
-select = ["E", "F", "B", "I", "UP", "C90", "N", "D", "ANN", "S", "A", "COM", "C4", "DTZ", "EM", "EXE", "FA", "ICN", "INP", "PIE", "PT", "Q", "RET", "SIM", "T20", "TID", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "RUF"]
-ignore = []
 exclude = [".venv", "build", "dist"]
 
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
+[tool.ruff.lint]
+select = [
+    "YTT", # flake8-2020
+    "S", # flake8-bandit
+    "B",  # flake8-bugbear
+    "A", # flake8-builtins
+    "C4", # flake8-comprehensions
+    "T10", # flake8-debugger
+    "SIM",  # flake8-simplify
+    "I", # isort
+    "C90", # mccabe
+    "E", # pycodestyle
+    "W",  # Warnings
+    "F", # Pyflakes
+    "PGH", # Pygrep hooks
+    "UP", # Pyupgrade
+    "RUF",  # Ruff
+    "TRY", # Tryceratops
+    "PL", # pylint: https://pypi.org/project/pylint/
+    "RET", # flake8-return: https://pypi.org/project/flake8-return/
+
+]
+external = [
+  "DOC", # pydoclint: https://pypi.org/project/pydoclint/
+]
+ignore = [
+    "E501", # LineTooLong
+    "E731", # DoNotAssignLambda
+    "F403", # Unspecified Import Names
+    "TRY003", # long messages
+    "S608",  # Possible SQL injection vector through string-based query construction
+    "B905", # Zip without explicit strict
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+
+# [tool.ruff.format]
+# quote-style = "double"
+# indent-style = "space"
+# skip-magic-trailing-comma = false
+# line-ending = "auto"
 
 # Configure Black (formatter)
 [tool.black]
 line-length = 88
 target-version = ["py312"]
+
+# Configure pydoclint
+[tool.pydoclint]
+style = "google"
+allow-init-docstring = true
+skip-checking-short-docstrings = false
+require-return-section-when-returning-nothing = false
+check-return-types = false
