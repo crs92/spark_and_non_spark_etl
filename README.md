@@ -19,8 +19,10 @@ Each step is timed independently for detailed performance analysis.
 ### 1. Install Dependencies
 
 ```bash
-pip install -e .
+make install
 ```
+
+This uses `uv` to install all dependencies from `pyproject.toml`.
 
 ### 2. Generate Test Data
 
@@ -121,38 +123,37 @@ python -m src.etl.spark_etl_incremental 3
 ### Build Images
 
 ```bash
-docker-compose build
+make docker-build
 ```
 
 ### Run with Docker
 
 ```bash
 # Start infrastructure
-docker-compose up -d minio postgres
+make docker-up
 
 # Run Polars ETL
-docker-compose run pythonic-etl python -m src.etl.polars_etl
+make docker-run-pythonic
 
 # Run Spark ETL
-docker-compose run spark-etl python -m src.etl.spark_etl_incremental
+make docker-run-spark
+
+# Run benchmark
+make docker-benchmark
 ```
 
 ## Kubernetes Deployment
 
-### Deploy Infrastructure
+### Setup Kubernetes
 
 ```bash
-kubectl apply -f k8s/infrastructure/
+make k8s-setup
 ```
 
-### Run ETL Jobs
+### Run Benchmark
 
 ```bash
-# Polars job
-kubectl apply -f k8s/pythonic-etl-job.yaml
-
-# Spark job
-kubectl apply -f k8s/spark-etl-job.yaml
+make k8s-benchmark
 ```
 
 ### View Logs
@@ -160,6 +161,12 @@ kubectl apply -f k8s/spark-etl-job.yaml
 ```bash
 kubectl logs -l job-name=pythonic-etl-job
 kubectl logs -l job-name=spark-etl-job
+```
+
+### Cleanup
+
+```bash
+make k8s-clean
 ```
 
 ## Incremental Development
@@ -196,11 +203,16 @@ python scripts/benchmark_incremental.py --input data.csv --steps 6
 
 ```bash
 # Run all tests
-pytest tests/ -v
+make test
 
-# Run specific tests
-pytest tests/test_polars_etl.py -v
-pytest tests/test_spark_etl.py -v
+# Run code quality checks
+make check
+
+# Format code
+make format
+
+# Run everything (checks + tests)
+make all
 ```
 
 ## Performance Insights
@@ -225,25 +237,36 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture diagrams and da
 ## Common Commands
 
 ```bash
-# Generate data
-python -m src.data_generation.generator --num-records 10000
+# Setup
+make install                    # Install dependencies with uv
+make help                       # Show all available commands
 
-# Run benchmark
+# Development
+make test                       # Run tests
+make check                      # Run code quality checks
+make format                     # Format code
+make clean                      # Clean temporary files
+
+# Data & Benchmarks
+python -m src.data_generation.generator --num-records 10000
 python scripts/benchmark_incremental.py --input data/generated/test_data.csv
 
 # Run individual ETL
 python -m src.etl.polars_etl
 python -m src.etl.spark_etl_incremental
 
-# Run tests
-pytest tests/ -v
-
 # Docker
-docker-compose build
-docker-compose up -d
+make docker-build               # Build images
+make docker-up                  # Start infrastructure
+make docker-run-pythonic        # Run Polars ETL
+make docker-run-spark           # Run Spark ETL
+make docker-benchmark           # Run benchmark
+make docker-down                # Stop services
 
 # Kubernetes
-kubectl apply -f k8s/
+make k8s-setup                  # Setup K8s cluster
+make k8s-benchmark              # Run distributed benchmark
+make k8s-clean                  # Cleanup K8s resources
 ```
 
 ## License
