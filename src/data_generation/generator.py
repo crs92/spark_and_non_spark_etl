@@ -82,6 +82,13 @@ class ClickstreamDataGenerator:
             Faker.seed(seed)
             random.seed(seed)
 
+        # Generate a realistic pool of users (much smaller than total events)
+        # This creates realistic user behavior patterns for sessionization
+        user_count = max(
+            100, self.record_count // 1000
+        )  # 1 user per 1000 events on average
+        self.user_pool = [str(uuid.uuid4()) for _ in range(user_count)]
+
     def _generate_event(self, timestamp: datetime) -> dict[str, Any]:
         """Generate a single clickstream event.
 
@@ -91,11 +98,19 @@ class ClickstreamDataGenerator:
         Returns:
             dict[str, Any]: A dictionary representing the clickstream event with fields such as event_id, user_id, session_id, timestamp, page_url, country, device, and ip_address.
         """
-        """Generate a single clickstream event."""
+        # Select a user from the realistic user pool instead of generating random UUIDs
+        user_id = random.choice(self.user_pool)  # noqa: S311
+
+        # Generate a temporary session_id that will be replaced by proper sessionization logic in ETL
+        # This is kept for backward compatibility but will be ignored by the ETL implementations
+        temp_session_id = f"temp_{user_id}_{timestamp.strftime('%Y%m%d_%H')}"
+
         return {
             "event_id": str(uuid.uuid4()),
-            "user_id": str(uuid.uuid4()),
-            "session_id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "session_id": (
+                temp_session_id
+            ),  # Temporary - will be replaced by ETL sessionization
             "timestamp": timestamp,
             "page_url": random.choice(self.PAGES),  # noqa: S311
             "country": random.choice(self.COUNTRIES),  # noqa: S311
@@ -108,7 +123,8 @@ class ClickstreamDataGenerator:
         start_date: datetime,
         days: int = 30,
     ) -> list[dict[str, Any]]:
-        """Generate bulk historical clickstream data.
+        """Generate bulk historical clickstream data with realistic user
+        session patterns.
 
         Args:
             start_date (datetime): The starting date for bulk data generation.
@@ -120,14 +136,50 @@ class ClickstreamDataGenerator:
         events = []
         end_date = start_date + timedelta(days=days)
 
-        for _ in range(self.record_count):
-            # Random timestamp within the date range
+        # Generate events in realistic user session clusters
+        remaining_events = self.record_count
+
+        while remaining_events > 0:
+            # Select a random user for this session cluster
+            user_id = random.choice(self.user_pool)  # noqa: S311
+
+            # Generate a random session start time
             random_seconds = random.randint(  # noqa: S311
                 0,
                 int((end_date - start_date).total_seconds()),
             )
-            timestamp = start_date + timedelta(seconds=random_seconds)
-            events.append(self._generate_event(timestamp))
+            session_start = start_date + timedelta(seconds=random_seconds)
+
+            # Generate 1-20 events for this user session cluster
+            events_in_cluster = min(
+                remaining_events, random.randint(1, 20)  # noqa: S311
+            )
+
+            current_time = session_start
+            for i in range(events_in_cluster):
+                # Create event at current time
+                event = self._generate_event(current_time)
+                event["user_id"] = user_id  # Ensure consistent user_id for the cluster
+                events.append(event)
+
+                # Move to next event time within the cluster
+                if i < events_in_cluster - 1:  # Not the last event
+                    # 70% chance of staying in same session (< 30 min gap)
+                    # 30% chance of creating session boundary (> 30 min gap)
+                    if random.random() < 0.7:  # noqa: S311
+                        # Stay in session: 1-29 minute gap
+                        gap_minutes = random.randint(1, 29)  # noqa: S311
+                    else:
+                        # Create session boundary: 31-120 minute gap
+                        gap_minutes = random.randint(31, 120)  # noqa: S311
+
+                    current_time += timedelta(minutes=gap_minutes)
+
+                    # Ensure we don't exceed the date range
+                    if current_time > end_date:
+                        break
+
+            remaining_events -= events_in_cluster
 
         return events
 
@@ -136,7 +188,8 @@ class ClickstreamDataGenerator:
         date: datetime,
         records_per_day: int = 1000,
     ) -> list[dict[str, Any]]:
-        """Generate incremental data for a specific day.
+        """Generate incremental data for a specific day with realistic user
+        session patterns.
 
         Args:
             date (datetime): The date for which to generate data.
@@ -147,14 +200,49 @@ class ClickstreamDataGenerator:
         """
         events = []
         start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
 
-        for _ in range(records_per_day):
-            # Random timestamp within the day
-            random_seconds = random.randint(  # noqa: S311
-                0, 86400
-            )  # 24 hours in seconds
-            timestamp = start_of_day + timedelta(seconds=random_seconds)
-            events.append(self._generate_event(timestamp))
+        # Generate events in realistic user session clusters
+        remaining_events = records_per_day
+
+        while remaining_events > 0:
+            # Select a random user for this session cluster
+            user_id = random.choice(self.user_pool)  # noqa: S311
+
+            # Generate a random session start time within the day
+            random_seconds = random.randint(0, 86400)  # noqa: S311
+            session_start = start_of_day + timedelta(seconds=random_seconds)
+
+            # Generate 1-10 events for this user session cluster (smaller for daily data)
+            events_in_cluster = min(
+                remaining_events, random.randint(1, 10)  # noqa: S311
+            )
+
+            current_time = session_start
+            for i in range(events_in_cluster):
+                # Create event at current time
+                event = self._generate_event(current_time)
+                event["user_id"] = user_id  # Ensure consistent user_id for the cluster
+                events.append(event)
+
+                # Move to next event time within the cluster
+                if i < events_in_cluster - 1:  # Not the last event
+                    # 80% chance of staying in same session (< 30 min gap)
+                    # 20% chance of creating session boundary (> 30 min gap)
+                    if random.random() < 0.8:  # noqa: S311
+                        # Stay in session: 1-29 minute gap
+                        gap_minutes = random.randint(1, 29)  # noqa: S311
+                    else:
+                        # Create session boundary: 31-120 minute gap
+                        gap_minutes = random.randint(31, 120)  # noqa: S311
+
+                    current_time += timedelta(minutes=gap_minutes)
+
+                    # Ensure we don't exceed the day
+                    if current_time >= end_of_day:
+                        break
+
+            remaining_events -= events_in_cluster
 
         return events
 

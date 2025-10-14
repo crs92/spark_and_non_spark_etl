@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spark-cluster-config
+  labels:
+    app: spark-cluster
+data:
+  spark-defaults.conf: |
+    spark.master                     k8s://https://kubernetes.default.svc:443
+    spark.kubernetes.container.image spark-etl:latest
+    spark.kubernetes.namespace       default
+    spark.executor.instances         3
+    spark.executor.memory            2g
+    spark.executor.cores             2
+    spark.driver.memory              1g
+    spark.sql.adaptive.enabled       true
+    spark.sql.adaptive.coalescePartitions.enabled true
+    spark.kubernetes.executor.request.cores 1
+    spark.kubernetes.executor.limit.cores   2
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spark-distributed-etl-job
+  labels:
+    app: spark-distributed-etl
+    stack: spark
+spec:
+  template:
+    metadata:
+      labels:
+        app: spark-distributed-etl
+        stack: spark
+    spec:
+      serviceAccountName: spark-service-account
+      restartPolicy: Never
+      containers:
+      - name: spark-driver
+        image: spark-etl:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: SPARK_MODE
+          value: "driver"
+        - name: SPARK_MASTER_URL
+          value: "k8s://https://kubernetes.default.svc:443"
+        - name: SPARK_EXECUTOR_INSTANCES
+          value: "3"
+        - name: SPARK_EXECUTOR_MEMORY
+          value: "2g"
+        - name: SPARK_EXECUTOR_CORES
+          value: "2"
+        - name: PYTHONPATH
+          value: "/app"
+        - name: MINIO_ENDPOINT
+          value: "http://minio:9000"
+        - name: MINIO_ACCESS_KEY
+          value: "minioadmin"
+        - name: MINIO_SECRET_KEY
+          value: "minioadmin123"
+        - name: POSTGRES_HOST
+          value: "postgres"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: "iceberg_catalog"
+        - name: POSTGRES_USER
+          value: "iceberg"
+        - name: POSTGRES_PASSWORD
+          value: "iceberg123"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: data-volume
+          mountPath: /app/data
+        - name: spark-config
+          mountPath: /opt/spark/conf
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: etl-data-pvc
+      - name: spark-config
+        configMap:
+          name: spark-cluster-config
+  backoffLimit: 3

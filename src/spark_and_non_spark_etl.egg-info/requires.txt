@@ -1,0 +1,13 @@
+polars
+pyarrow
+pyiceberg
+duckdb
+pyspark
+faker
+
+[dev]
+ruff
+black
+pre-commit
+pytest
+memory-profiler
