@@ -1,8 +1,6 @@
 # Makefile
 
-# U# Phony targets are commands that don't represent a file.
-# This tells 'make' to always execute the command regardless of whether a file with that name exists.
-.PHONY: help install check format test all clean docker-build docker-up docker-down docker-logs docker-shell docker-test docker-build-spark docker-build-pythonic docker-run-spark docker-run-pythonic docker-benchmark docker-test-quick k8s-setup k8s-benchmark k8s-cleanbash for all commands
+# Use bash for all commands
 SHELL := /bin/bash
 
 # Define the default goal, which will be executed when you just run "make"
@@ -17,7 +15,11 @@ TEST_DIR := tests
 
 # Phony targets are commands that don't represent a file.
 # This tells 'make' to always execute the command regardless of whether a file with that name exists.
-.PHONY: help install check format test all clean docker-build docker-up docker-down docker-logs docker-shell docker-test docker-build-spark docker-build-pythonic docker-run-spark docker-run-pythonic docker-benchmark
+.PHONY: help install check format test all clean pre-commit-clean \
+        docker-build docker-build-spark docker-build-pythonic docker-up docker-down \
+        docker-run-spark docker-run-pythonic docker-test-quick docker-benchmark \
+        docker-logs docker-shell docker-test docker-clean \
+        k8s-setup k8s-benchmark k8s-clean
 
 # Self-documenting help command. It parses this file to show available commands.
 help: ## ✨ Show this help message
