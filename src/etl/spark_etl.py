@@ -97,7 +97,7 @@ def run_spark_etl(
     input_file = Path(input_path) / "sample_data.csv"
     if not input_file.exists():
         logger.info("Creating sample data...")
-        from src.data_generation import generate_clickstream_data
+        from src.data_generation.generator import generate_clickstream_data
 
         generate_clickstream_data(
             num_records=1000, output_path=str(input_file), format_type="csv"

@@ -16,6 +16,7 @@ TEST_DIR := tests
 # Phony targets are commands that don't represent a file.
 # This tells 'make' to always execute the command regardless of whether a file with that name exists.
 .PHONY: help install check format test all clean pre-commit-clean \
+        generate-data benchmark \
         docker-build docker-build-spark docker-build-pythonic docker-up docker-down \
         docker-run-spark docker-run-pythonic docker-test-quick docker-benchmark \
         docker-logs docker-shell docker-test docker-clean \
@@ -66,6 +67,18 @@ clean: ## 🧹 Remove temporary Python files and build artifacts
 	@find . -type d -name ".pytest_cache" -exec rm -r {} +
 	@rm -rf build/ dist/ .egg-info/
 	@echo "Cleanup complete."
+
+# Data generation and benchmarking
+generate-data: ## 📊 Generate test data (default: 10000 records)
+	@echo "--- Generating test data ---"
+	@mkdir -p data/generated
+	@$(PYTHON) -c "from src.data_generation.generator import generate_clickstream_data; generate_clickstream_data(num_records=${RECORDS:-10000}, output_path='data/generated/test_data.csv')"
+	@echo "Test data generated at data/generated/test_data.csv"
+
+benchmark: ## 🏁 Run incremental ETL benchmark
+	@echo "--- Running incremental ETL benchmark ---"
+	@$(PYTHON) scripts/benchmark_incremental.py --input data/generated/test_data.csv
+	@echo "Benchmark complete!"
 
 # Docker commands
 docker-build: ## 🐳 Build both Docker images

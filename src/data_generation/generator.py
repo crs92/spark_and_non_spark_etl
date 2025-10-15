@@ -361,3 +361,41 @@ def generate_benchmark_data(
         results["files"][format_type] = format_results
 
     return results
+
+
+def generate_clickstream_data(
+    num_records: int,
+    output_path: str,
+    format_type: str = "csv",
+    seed: int | None = None,
+) -> None:
+    """Simple helper to generate clickstream data (for backward compatibility).
+    
+    Args:
+        num_records: Number of records to generate
+        output_path: Path to output file
+        format_type: Output format ('csv' or 'parquet')
+        seed: Random seed for reproducibility
+    """
+    from pathlib import Path
+    
+    # Determine size based on record count
+    if num_records <= 100_000:
+        size = DataSize.SMALL
+    elif num_records <= 10_000_000:
+        size = DataSize.MEDIUM
+    else:
+        size = DataSize.LARGE
+    
+    # Generate data
+    generator = ClickstreamDataGenerator(size=size, seed=seed)
+    df = generator.generate_bulk_data(num_records=num_records)
+    
+    # Write to file
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    if format_type == "csv":
+        df.write_csv(output_file)
+    else:
+        df.write_parquet(output_file)

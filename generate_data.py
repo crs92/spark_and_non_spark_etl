@@ -6,7 +6,7 @@ import logging
 import sys
 from pathlib import Path
 
-from src.data_generation import generate_benchmark_data
+from src.data_generation.generator import generate_benchmark_data
 
 # Configure logger
 logging.basicConfig(

@@ -27,22 +27,27 @@ This uses `uv` to install all dependencies from `pyproject.toml`.
 ### 2. Generate Test Data
 
 ```bash
-python -m src.data_generation.generator \
-  --num-records 10000 \
-  --output data/generated/test_data.csv
+# Using make (easiest)
+make generate-data
+
+# Or specify custom record count
+make generate-data RECORDS=50000
+
+# Or using Python directly
+python -c "from src.data_generation.generator import generate_clickstream_data; generate_clickstream_data(10000, 'data/generated/test_data.csv')"
 ```
 
 ### 3. Run Benchmark
 
 ```bash
-# Run all 5 steps
-python scripts/benchmark_incremental.py \
-  --input data/generated/test_data.csv
+# Using make (easiest)
+make benchmark
+
+# Or using Python directly
+python scripts/benchmark_incremental.py --input data/generated/test_data.csv
 
 # Run only first 3 steps
-python scripts/benchmark_incremental.py \
-  --input data/generated/test_data.csv \
-  --steps 3
+python scripts/benchmark_incremental.py --input data/generated/test_data.csv --steps 3
 ```
 
 ### 4. View Results
@@ -102,20 +107,20 @@ spark_and_non_spark_etl/
 
 ```bash
 # Run all steps
-python -m src.etl.polars_etl
+python src/etl/polars_etl.py
 
 # Run only first 3 steps
-python -m src.etl.polars_etl 3
+python src/etl/polars_etl.py 3
 ```
 
 ### Spark ETL
 
 ```bash
 # Run all steps
-python -m src.etl.spark_etl_incremental
+python src/etl/spark_etl_incremental.py
 
 # Run only first 3 steps
-python -m src.etl.spark_etl_incremental 3
+python src/etl/spark_etl_incremental.py 3
 ```
 
 ## Docker Deployment
@@ -248,12 +253,13 @@ make format                     # Format code
 make clean                      # Clean temporary files
 
 # Data & Benchmarks
-python -m src.data_generation.generator --num-records 10000
-python scripts/benchmark_incremental.py --input data/generated/test_data.csv
+make generate-data              # Generate test data (10K records)
+make generate-data RECORDS=50000  # Generate custom amount
+make benchmark                  # Run benchmark
 
 # Run individual ETL
-python -m src.etl.polars_etl
-python -m src.etl.spark_etl_incremental
+python src/etl/polars_etl.py
+python src/etl/spark_etl_incremental.py
 
 # Docker
 make docker-build               # Build images

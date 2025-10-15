@@ -7,7 +7,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from src.data_generation import (
+from src.data_generation.generator import (
     ClickstreamDataGenerator,
     ComplexityLevel,
     DataCharacteristics,

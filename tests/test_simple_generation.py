@@ -6,7 +6,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from src.data_generation import generate_benchmark_data
+from src.data_generation.generator import generate_benchmark_data
 
 
 def test_generate_small_benchmark_data():
