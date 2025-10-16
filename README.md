@@ -28,13 +28,14 @@ This uses `uv` to install all dependencies from `pyproject.toml`.
 
 ```bash
 # Using make (easiest)
-make generate-data
+make generate-data                    # Small dataset (~100K records)
+make generate-data SIZE=medium        # Medium dataset (~10M records)
+make generate-data SIZE=large         # Large dataset (~100M records)
 
-# Or specify custom record count
-make generate-data RECORDS=50000
-
-# Or using Python directly
-python -c "from src.data_generation.generator import generate_clickstream_data; generate_clickstream_data(10000, 'data/generated/test_data.csv')"
+# Or use the CLI directly for more options
+python -m src.data_generation.cli small                    # ~100K records
+python -m src.data_generation.cli medium --days 14         # With 14 incremental days
+python -m src.data_generation.cli large --formats parquet  # Parquet format only
 ```
 
 ### 3. Run Benchmark
@@ -253,8 +254,9 @@ make format                     # Format code
 make clean                      # Clean temporary files
 
 # Data & Benchmarks
-make generate-data              # Generate test data (10K records)
-make generate-data RECORDS=50000  # Generate custom amount
+make generate-data              # Generate data (small dataset)
+make generate-data SIZE=medium  # Generate medium dataset
+python -m src.data_generation.cli small  # Or use CLI directly
 make benchmark                  # Run benchmark
 
 # Run individual ETL

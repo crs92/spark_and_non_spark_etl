@@ -69,15 +69,17 @@ clean: ## 🧹 Remove temporary Python files and build artifacts
 	@echo "Cleanup complete."
 
 # Data generation and benchmarking
-generate-data: ## 📊 Generate test data (default: 10000 records)
+generate-data: ## 📊 Generate test data (use SIZE=small|medium|large, default: small)
 	@echo "--- Generating test data ---"
-	@mkdir -p data/generated
-	@$(PYTHON) -c "from src.data_generation.generator import generate_clickstream_data; generate_clickstream_data(num_records=${RECORDS:-10000}, output_path='data/generated/test_data.csv')"
-	@echo "Test data generated at data/generated/test_data.csv"
+ifeq (${SIZE},)
+	@$(PYTHON) -m src.data_generation.cli small
+else
+	@$(PYTHON) -m src.data_generation.cli ${SIZE}
+endif
 
 benchmark: ## 🏁 Run incremental ETL benchmark
 	@echo "--- Running incremental ETL benchmark ---"
-	@$(PYTHON) scripts/benchmark_incremental.py --input data/generated/test_data.csv
+	@$(PYTHON) scripts/benchmark_incremental.py --input data/generated/clickstream_data_small_simple.csv
 	@echo "Benchmark complete!"
 
 # Docker commands
