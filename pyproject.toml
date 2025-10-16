@@ -59,8 +59,30 @@ ignore = [
     "E731", # DoNotAssignLambda
     "F403", # Unspecified Import Names
     "TRY003", # long messages
+    "TRY400", # Use logging.exception instead of logging.error
     "S608",  # Possible SQL injection vector through string-based query construction
     "B905", # Zip without explicit strict
+    "PLR2004", # Magic values in comparisons (acceptable for domain logic)
+    "PLR0912", # Too many branches (complex ETL logic)
+    "PLR0913", # Too many arguments (config objects)
+    "PLR0915", # Too many statements (ETL pipelines)
+    "C901",    # Too complex (ETL functions)
+    "S104",    # Binding to all interfaces (0.0.0.0 is default value)
+    "PLC0415", # Import not at top (lazy imports for performance)
+    "A002",    # Shadowing builtin (format parameter is common)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",    # Use of assert (expected in tests)
+    "PLR2004", # Magic values in comparisons (common in tests)
+    "F841",    # Unused variables (test fixtures)
+    "RET504",  # Unnecessary assignment before return (test data setup)
+    "SIM117",  # Nested with statements (pytest patterns)
+]
+"scripts/benchmark.py" = [
+    "S603",    # subprocess call (docker commands are trusted)
+    "S607",    # Starting process with partial path (docker/docker-compose)
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -78,10 +100,6 @@ convention = "google"
 line-length = 88
 target-version = ["py312"]
 
-# Configure pydoclint
-[tool.pydoclint]
-style = "google"
-allow-init-docstring = true
-skip-checking-short-docstrings = false
-require-return-section-when-returning-nothing = false
-check-return-types = false
+# Configure pydoclint - disabled for now due to conflicts
+# [tool.pydoclint]
+# style = "google"

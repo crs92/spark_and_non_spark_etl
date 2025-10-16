@@ -37,14 +37,18 @@ class TestDataCharacteristics:
 
     def test_invalid_skew_factor(self):
         """Test validation of skew_factor bounds."""
-        with pytest.raises(ValueError, match="skew_factor must be between 0.0 and 1.0"):
+        with pytest.raises(
+            ValueError, match=r"skew_factor must be between 0\.0 and 1\.0"
+        ):
             DataCharacteristics(
                 size=DataSize.SMALL,
                 complexity=ComplexityLevel.SIMPLE,
                 skew_factor=1.5,
             )
 
-        with pytest.raises(ValueError, match="skew_factor must be between 0.0 and 1.0"):
+        with pytest.raises(
+            ValueError, match=r"skew_factor must be between 0\.0 and 1\.0"
+        ):
             DataCharacteristics(
                 size=DataSize.SMALL,
                 complexity=ComplexityLevel.SIMPLE,

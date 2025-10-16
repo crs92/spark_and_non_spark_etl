@@ -135,12 +135,7 @@ class ETLBenchmark:
 
         # Execute the ETL command
         process = subprocess.Popen(
-            [
-                "docker",
-                "exec",
-                container_name,
-            ]
-            + command,
+            ["docker", "exec", container_name, *command],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -321,7 +316,7 @@ class ETLBenchmark:
 
         return results
 
-    def save_results(self, filename: str = None):
+    def save_results(self, filename: str | None = None):
         """Save benchmark results to JSON file."""
         if filename is None:
             filename = f"benchmark_results_{self.data_size}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"

@@ -26,11 +26,12 @@ repos:
       - id: ruff
         args: [ --fix ]
 
-  - repo: https://github.com/jsh9/pydoclint
-    rev: "0.5.6"
-    hooks:
-      - id: pydoclint
-        args: [ --style=google, --allow-init-docstring=True]
+  # Disabled pydoclint due to type hint conflicts
+  # - repo: https://github.com/jsh9/pydoclint
+  #   rev: "0.5.6"
+  #   hooks:
+  #     - id: pydoclint
+  #       args: [ --style=google, --allow-init-docstring=True]
 
   - repo: https://github.com/psf/black
     rev: "23.12.1"

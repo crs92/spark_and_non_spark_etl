@@ -28,8 +28,8 @@ class PolarsPipeline:
         """Initialize pipeline with input/output paths.
 
         Args:
-            input_path: Path to input CSV file
-            output_path: Path to output directory
+            input_path (str): Path to input CSV file
+            output_path (str): Path to output directory
         """
         self.input_path = Path(input_path)
         self.output_path = Path(output_path)
@@ -118,6 +118,9 @@ class PolarsPipeline:
 
         Returns:
             Path to output file
+
+        Raises:
+            ValueError: the format is not csv or parquet
         """
         logger.info("Step 3: Loading data to %s", self.output_path)
         start = time.time()

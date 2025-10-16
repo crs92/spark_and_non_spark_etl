@@ -129,6 +129,9 @@ class SparkPipeline:
 
         Returns:
             Path to output directory
+
+        Raises:
+            ValueError: the format is not csv or parquet
         """
         logger.info("Step 3: Loading data to %s", self.output_path)
         start = time.time()
@@ -241,13 +244,16 @@ class SparkPipeline:
         logger.info("Pipeline completed in %.2fs", total_time)
         logger.info("=" * 60)
 
+        # Get record count before stopping Spark
+        record_count = self.df.count() if self.df is not None else 0
+
         # Stop Spark
         self.spark.stop()
 
         return {
             "total_time": total_time,
             "steps": self.metrics,
-            "records_processed": self.df.count() if self.df is not None else 0,
+            "records_processed": record_count,
         }
 
 
@@ -259,12 +265,12 @@ def run_spark_etl(
     """Run Spark ETL pipeline.
 
     Args:
-        input_path: Path to input CSV file
-        output_path: Path to output directory
-        steps: Number of steps to run (1-5)
+        input_path (str): Path to input CSV file
+        output_path (str): Path to output directory
+        steps (int): Number of steps to run (1-5)
 
     Returns:
-        Dictionary with metrics
+        dict[str, Any]: Dictionary with metrics
     """
     pipeline = SparkPipeline(input_path, output_path)
     return pipeline.run_pipeline(steps=steps)

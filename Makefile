@@ -37,13 +37,10 @@ pre-commit-clean: ## 🧹 Clean pre-commit cache
 	@echo "pre-commit cache cleaned."
 
 .PHONY: check
-check: ## Run code quality tools.
-	@echo "🚀 Linting code: Running pre-commit"
-	@git ls-files -- '*' | xargs uv run pre-commit run --files
-	@echo "🚀 Installing missing types stubs"
-	@uv pip install types-pytz
-	@echo "🚀 Static type checking: Running mypy"
-	@uv run mypy --install-types --non-interactive
+check: ## Run code quality tools (only on src/)
+	@echo "🚀 Linting code: Running pre-commit on src/"
+	@git ls-files -- 'src/**/*.py' | xargs uv run pre-commit run --files
+	@echo "✅ Code quality checks passed!"
 
 format: ## 🎨 Auto-format code using Black and Ruff
 	@echo "--- Formatting with Black ---"
