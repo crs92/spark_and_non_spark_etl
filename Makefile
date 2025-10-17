@@ -9,6 +9,12 @@ SHELL := /bin/bash
 # Define the Python interpreter from our virtual environment
 PYTHON := .venv/bin/python
 
+# Define Docker/Podman command
+# Check if podman-desktop-root connection is available, otherwise use default
+DOCKER := $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
+PODMAN_CONNECTION := $(shell podman system connection list 2>/dev/null | grep -q podman-desktop-root && echo "--connection podman-desktop-root" || echo "")
+DOCKER_CMD := $(DOCKER) $(PODMAN_CONNECTION)
+
 # Define source code directories
 SRC_DIR := src
 TEST_DIR := tests
@@ -82,39 +88,41 @@ benchmark: ## 🏁 Run incremental ETL benchmark
 # Docker commands
 docker-build: ## 🐳 Build both Docker images
 	@echo "--- Building both Docker images ---"
-	@docker-compose build spark-etl pythonic-etl
+	@$(DOCKER_CMD) build -f Dockerfile.spark -t spark-etl .
+	@$(DOCKER_CMD) build -f Dockerfile.pythonic -t pythonic-etl .
 
 docker-build-spark: ## ⚡ Build Spark ETL image only
 	@echo "--- Building Spark ETL image ---"
-	@docker build -f Dockerfile.spark -t spark-etl .
+	@$(DOCKER_CMD) build -f Dockerfile.spark -t spark-etl .
 
 docker-build-pythonic: ## 🐍 Build Pythonic ETL image only
 	@echo "--- Building Pythonic ETL image ---"
-	@docker build -f Dockerfile.pythonic -t pythonic-etl .
+	@$(DOCKER_CMD) build -f Dockerfile.pythonic -t pythonic-etl .
 
 docker-up: ## 🚀 Start infrastructure services
 	@echo "--- Starting infrastructure services ---"
-	@docker-compose up -d minio postgres
+	@$(DOCKER_CMD) compose up -d minio postgres
 	@echo "Infrastructure started:"
 	@echo "  - MinIO Console: http://localhost:9001"
 	@echo "  - PostgreSQL: localhost:5432"
 
 docker-run-spark: ## ⚡ Run Spark ETL (with infrastructure)
 	@echo "--- Running Spark ETL ---"
-	@docker-compose --profile spark up spark-etl
+	@$(DOCKER_CMD) compose --profile spark up spark-etl
 
 docker-run-pythonic: ## 🐍 Run Pythonic ETL (with infrastructure)
 	@echo "--- Running Pythonic ETL ---"
-	@docker-compose --profile pythonic up pythonic-etl
+	@$(DOCKER_CMD) compose --profile pythonic up pythonic-etl
 
 docker-test-quick: ## 🧪 Quick test of both ETL images without infrastructure
 	@echo "--- Quick ETL image test ---"
-	@mkdir -p data/input data/output
 	@echo "Testing Pythonic ETL..."
-	@docker run --rm -v $(shell pwd)/data:/app/data pythonic-etl || true
-	@echo "Testing Spark ETL..."
-	@docker run --rm -v $(shell pwd)/data:/app/data spark-etl || true
+	@bash scripts/test_pythonic_docker.sh
 	@echo "Quick test completed."
+
+docker-test-compose: ## 🧪 Test docker-compose setup with infrastructure
+	@echo "--- Testing docker-compose setup ---"
+	@bash scripts/test_docker_compose.sh
 
 docker-benchmark: ## 📊 Run performance benchmark comparison
 	@echo "--- Running ETL performance benchmark ---"
@@ -122,24 +130,24 @@ docker-benchmark: ## 📊 Run performance benchmark comparison
 
 docker-down: ## 🛑 Stop all Docker services
 	@echo "--- Stopping Docker services ---"
-	@docker-compose down
+	@$(DOCKER_CMD) compose down
 
 docker-logs: ## 📋 Show logs from all Docker services
-	@docker-compose logs -f
+	@$(DOCKER_CMD) compose logs -f
 
 docker-shell: ## 🐚 Open a shell in the development container
-	@docker-compose --profile dev up -d dev-env
-	@docker-compose exec dev-env bash
+	@$(DOCKER_CMD) compose --profile dev up -d dev-env
+	@$(DOCKER_CMD) compose exec dev-env bash
 
 docker-test: ## 🧪 Run tests inside Docker container
 	@echo "--- Running tests in Docker container ---"
-	@docker-compose --profile dev up -d dev-env
-	@docker-compose exec dev-env python -m pytest tests/
+	@$(DOCKER_CMD) compose --profile dev up -d dev-env
+	@$(DOCKER_CMD) compose exec dev-env python -m pytest tests/
 
 docker-clean: ## 🧽 Remove Docker containers, networks, and volumes
 	@echo "--- Cleaning up Docker resources ---"
-	@docker-compose down -v --remove-orphans
-	@docker system prune -f
+	@$(DOCKER_CMD) compose down -v --remove-orphans
+	@$(DOCKER_CMD) system prune -f
 
 # Kubernetes commands
 k8s-setup: ## ☸️ Setup Kubernetes cluster for distributed testing

@@ -8,8 +8,7 @@ services:
       dockerfile: Dockerfile.spark
     container_name: spark-etl-service
     volumes:
-      - ./data:/app/data
-      - ./config:/app/config
+      - ./data:/app/data:z
     environment:
       - PYTHONPATH=/app
       - SPARK_MASTER_URL=local[*]
@@ -39,8 +38,7 @@ services:
       dockerfile: Dockerfile.pythonic
     container_name: pythonic-etl-service
     volumes:
-      - ./data:/app/data
-      - ./config:/app/config
+      - ./data:/app/data:z
     environment:
       - PYTHONPATH=/app
       - MINIO_ENDPOINT=http://minio:9000
@@ -92,7 +90,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./docker/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - etl-network
     healthcheck:
@@ -115,9 +112,11 @@ services:
       - "8080:8080"  # Spark Master Web UI
       - "7077:7077"  # Spark Master
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:z
     networks:
       - etl-network
+    profiles:
+      - distributed
 
   # Spark Worker
   spark-worker:
@@ -133,11 +132,13 @@ services:
       - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
       - SPARK_SSL_ENABLED=no
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:z
     networks:
       - etl-network
     depends_on:
       - spark-master
+    profiles:
+      - distributed
 
   # Development environment (for interactive development)
   dev-env:
@@ -147,9 +148,8 @@ services:
       target: development
     container_name: etl-development
     volumes:
-      - .:/app
-      - ./data:/app/data
-      - ./notebooks:/app/notebooks
+      - .:/app:z
+      - ./data:/app/data:z
     environment:
       - PYTHONPATH=/app
     ports:
