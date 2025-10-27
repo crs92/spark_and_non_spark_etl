@@ -15,8 +15,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: pythonic-etl
-        image: pythonic-etl:latest
-        imagePullPolicy: IfNotPresent
+        image: localhost/pythonic-etl:latest
+        imagePullPolicy: Never
         env:
         - name: PYTHONPATH
           value: "/app"

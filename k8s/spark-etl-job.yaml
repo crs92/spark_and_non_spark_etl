@@ -15,8 +15,8 @@ spec:
       restartPolicy: Never
       containers:
       - name: spark-etl
-        image: spark-etl:latest
-        imagePullPolicy: IfNotPresent
+        image: localhost/spark-etl:latest
+        imagePullPolicy: Never
         env:
         - name: PYTHONPATH
           value: "/app"
