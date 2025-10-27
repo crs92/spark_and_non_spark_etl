@@ -1,40 +1,38 @@
 # Spark-based ETL Docker Image
-FROM bitnami/spark:3.5 as spark-base
+FROM python:3.12-slim
 
-# Switch to root for installations
-USER root
-
-# Install Python and system dependencies
+# Install system dependencies and Java
 RUN apt-get update && apt-get install -y \
-    python3-pip \
-    python3-venv \
+    openjdk-21-jre-headless \
     curl \
-    git \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
+# Set Java home (Java 21 works with Spark 3.5+)
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+
 # Install uv for package management
-RUN pip3 install uv
+RUN pip install --no-cache-dir uv
 
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files
-COPY pyproject.toml uv.lock* ./
+# Copy dependency files first for better layer caching
+COPY pyproject.toml ./
 
-# Create and activate virtual environment, install dependencies
-RUN python3 -m venv /opt/venv && \
-    . /opt/venv/bin/activate && \
-    uv pip install pyspark pyarrow pyiceberg
+# Install all dependencies from pyproject.toml
+RUN uv pip install --system pyspark pyarrow pyiceberg faker
 
 # Copy source code
 COPY src/ ./src/
+
+# Copy generated data
 COPY data/ ./data/
 
 # Set environment variables
-ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONPATH="/app"
-ENV SPARK_HOME="/opt/bitnami/spark"
-ENV PYSPARK_PYTHON="/opt/venv/bin/python"
+ENV PYSPARK_PYTHON="python"
+ENV SPARK_HOME="/usr/local/lib/python3.12/site-packages/pyspark"
 
 # Expose Spark UI ports
 EXPOSE 4040 4041

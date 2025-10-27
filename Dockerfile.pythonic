@@ -1,5 +1,5 @@
 # Pythonic ETL Docker Image (Polars + DuckDB + PyIceberg)
-FROM python:3.11-slim as pythonic-base
+FROM python:3.12-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -8,32 +8,39 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Install minimal system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    git \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast package management
-RUN pip install uv
+RUN pip install --no-cache-dir uv
 
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files
-COPY pyproject.toml uv.lock* ./
+# Copy dependency files first for better layer caching
+COPY pyproject.toml ./
 
-# Create and activate virtual environment, install dependencies
-RUN uv venv /opt/venv && \
-    . /opt/venv/bin/activate && \
-    uv pip install polars pyarrow pyiceberg duckdb
+# Install all dependencies from pyproject.toml using uv
+RUN uv pip install --system \
+    polars \
+    pyarrow \
+    pyiceberg \
+    duckdb \
+    faker
 
 # Copy source code
 COPY src/ ./src/
-COPY data/ ./data/
+
+# Copy generated data
+COPY data/ /app/data/
+
+# Create output directory
+RUN mkdir -p /app/output
 
 # Set environment variables
-ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONPATH="/app"
 
-# Default command runs the Pythonic ETL
-CMD ["python", "-m", "src.etl.non_spark_etl"]
+# Default command runs the Pythonic ETL with sample data
+CMD ["python", "-m", "src.etl.polars_etl", "5"]

@@ -31,8 +31,6 @@ Thumbs.db
 # Project specific
 *.log
 .env
-data/output/*
-!data/output/.gitkeep
 notebooks/.ipynb_checkpoints
 
 # Documentation

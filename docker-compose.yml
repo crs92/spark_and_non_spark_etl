@@ -7,8 +7,6 @@ services:
       context: .
       dockerfile: Dockerfile.spark
     container_name: spark-etl-service
-    volumes:
-      - ./data:/app/data:z
     environment:
       - PYTHONPATH=/app
       - SPARK_MASTER_URL=local[*]
@@ -37,8 +35,6 @@ services:
       context: .
       dockerfile: Dockerfile.pythonic
     container_name: pythonic-etl-service
-    volumes:
-      - ./data:/app/data:z
     environment:
       - PYTHONPATH=/app
       - MINIO_ENDPOINT=http://minio:9000
@@ -65,8 +61,8 @@ services:
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin123
     ports:
-      - "9000:9000"      # MinIO API
-      - "9001:9001"      # MinIO Console
+      - "19000:9000"      # MinIO API
+      - "19001:9001"      # MinIO Console
     volumes:
       - minio-data:/data
     command: server /data --console-address ":9001"
@@ -87,13 +83,13 @@ services:
       - POSTGRES_USER=iceberg
       - POSTGRES_PASSWORD=iceberg123
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - etl-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U iceberg"]
+      test: ["CMD-SHELL", "pg_isready -U iceberg -d iceberg_catalog"]
       interval: 10s
       timeout: 5s
       retries: 5

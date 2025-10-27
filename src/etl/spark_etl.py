@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_spark_etl(
-    input_path: str = "/app/data/input",
+    input_path: str = "/app/data/generated/bulk",
     output_path: str = "/app/data/output",
     quality_config: DataQualityConfig | None = None,
 ) -> tuple[Path, DataQualityReport]:
@@ -93,16 +93,17 @@ def run_spark_etl(
     # Simulate some processing time
     time.sleep(3)  # Spark has more overhead
 
-    # Create sample data if input doesn't exist
-    input_file = Path(input_path) / "sample_data.csv"
-    if not input_file.exists():
-        logger.info("Creating sample data...")
-        from src.data_generation.generator import generate_clickstream_data
+    # # Create sample data if input doesn't exist
+    # input_file = Path(input_path) / "sample_data.csv"
+    # if not input_file.exists():
+    #     logger.info("Creating sample data...")
+    #     from src.data_generation.generator import generate_clickstream_data
 
-        generate_clickstream_data(
-            num_records=1000, output_path=str(input_file), format_type="csv"
-        )
+    #     generate_clickstream_data(
+    #         num_records=1000, output_path=str(input_file), format_type="csv"
+    #     )
 
+    input_file = Path(input_path) / "bulk_data_small.csv"
     # Read and process data
     logger.info("Reading data...")
     df = spark.read.option("header", "true").csv(str(input_file))

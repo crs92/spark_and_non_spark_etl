@@ -238,7 +238,7 @@ class PolarsPipeline:
 
 
 def run_polars_etl(
-    input_path: str = "data/input/sample_data.csv",
+    input_path: str = "data/generated/bulk/bulk_data_small.csv",
     output_path: str = "data/output/polars",
     steps: int = 5,
 ) -> dict[str, Any]:
