@@ -1,9 +1,11 @@
 -- Initialize Iceberg catalog database
-CREATE DATABASE IF NOT EXISTS iceberg_catalog;
-CREATE USER IF NOT EXISTS iceberg WITH PASSWORD 'iceberg123';
+
+-- Create schema for Iceberg catalog
+CREATE SCHEMA IF NOT EXISTS iceberg;
+
+-- Grant permissions
+GRANT ALL PRIVILEGES ON SCHEMA iceberg TO iceberg;
 GRANT ALL PRIVILEGES ON DATABASE iceberg_catalog TO iceberg;
 
--- Create schema for Iceberg tables
-\c iceberg_catalog;
-CREATE SCHEMA IF NOT EXISTS iceberg;
-GRANT ALL ON SCHEMA iceberg TO iceberg;
+-- Create tables for Iceberg catalog metadata (if needed)
+-- Iceberg will create its own tables, but we can prepare the schema
