@@ -429,6 +429,38 @@ class FullETLBenchmark:
         logger.info(f"Results saved to: {filename}")
         return filename
 
+    def export_timing_metrics(self):
+        """Export timing metrics to JSON files."""
+        logger.info("\n" + "=" * 80)
+        logger.info("EXPORTING TIMING METRICS")
+        logger.info("=" * 80)
+
+        polars = self.results.get("polars", {})
+        spark = self.results.get("spark", {})
+
+        if "error" in polars or "error" in spark:
+            logger.warning("Cannot export timing metrics due to errors")
+            return
+
+        # Export timing metrics from bulk mode
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        if "bulk" in polars and "timing_metrics" in polars["bulk"]:
+            polars_file = (
+                self.output_dir / f"polars_timing_{self.data_size}_{timestamp}.json"
+            )
+            with open(polars_file, "w") as f:
+                json.dump(polars["bulk"]["timing_metrics"], f, indent=2)
+            logger.info("  Polars timing: %s", polars_file)
+
+        if "bulk" in spark and "timing_metrics" in spark["bulk"]:
+            spark_file = (
+                self.output_dir / f"spark_timing_{self.data_size}_{timestamp}.json"
+            )
+            with open(spark_file, "w") as f:
+                json.dump(spark["bulk"]["timing_metrics"], f, indent=2)
+            logger.info("  Spark timing: %s", spark_file)
+
 
 def main():
     """Main entry point."""
@@ -489,8 +521,12 @@ Prerequisites:
         benchmark.print_results()
         results_file = benchmark.save_results()
 
+        # Export timing metrics
+        benchmark.export_timing_metrics()
+
         print("\n✅ Benchmark completed successfully!")
         print(f"📊 Results saved to: {results_file}")
+        print(f"📈 Timing metrics exported to: {args.output}")
 
     except Exception as e:
         logger.error(f"Benchmark failed: {e}", exc_info=True)

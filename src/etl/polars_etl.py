@@ -30,6 +30,7 @@ from pyiceberg.types import (
 
 from src.etl.data_quality import DataQualityConfig, DataQualityReport
 from src.etl.iceberg_config import IcebergConfig
+from src.etl.timing_decorator import PipelineTimer, timed_phase
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -77,6 +78,9 @@ class PolarsPipeline:
             "total_time": 0.0,
         }
         self.quality_report = None
+
+        # Simple timing decorator
+        self._timer = PipelineTimer(framework="polars", mode=mode)
 
         # Initialize Iceberg catalog if needed
         if self.use_iceberg:
@@ -134,6 +138,7 @@ class PolarsPipeline:
             )
             logger.info("Created Iceberg table: %s", self.table_name)
 
+    @timed_phase("extract")
     def read_data(self) -> pl.DataFrame:
         """Read data based on mode (bulk or incremental).
 
@@ -178,6 +183,7 @@ class PolarsPipeline:
 
         return self.df
 
+    @timed_phase("transform", "quality_checks")
     def apply_data_quality(self) -> pl.DataFrame:
         """Apply data quality checks and cleansing.
 
@@ -293,6 +299,7 @@ class PolarsPipeline:
 
         return self.df
 
+    @timed_phase("transform", "sessionization")
     def apply_sessionization(self) -> pl.DataFrame:
         """Apply proper sessionization with 30-minute inactivity window.
 
@@ -426,6 +433,7 @@ class PolarsPipeline:
 
         return self.df
 
+    @timed_phase("load", "write")
     def write_output(self, format: str = "parquet") -> Path | str:
         """Write processed data to output.
 
@@ -604,7 +612,8 @@ class PolarsPipeline:
             logger.info("Output: %s files", output_format)
         logger.info("=" * 60)
 
-        total_start = time.time()
+        # Start pipeline timing
+        self._timer.start_pipeline()
 
         # Read data
         self.read_data()
@@ -625,7 +634,11 @@ class PolarsPipeline:
         # Write output (handles merge for Iceberg in incremental mode)
         output_location = self.write_output(format=output_format)
 
-        self.metrics["total_time"] = time.time() - total_start
+        # End pipeline timing
+        self._timer.end_pipeline()
+
+        # Update legacy metrics for compatibility
+        self.metrics["total_time"] = self._timer.metrics["total_time"]
 
         logger.info("=" * 60)
         logger.info("Pipeline completed in %.2fs", self.metrics["total_time"])
@@ -635,10 +648,14 @@ class PolarsPipeline:
         if self.quality_report:
             self.quality_report.log_summary()
 
+        # Log timing summary
+        self._timer.log_summary()
+
         return {
             "mode": self.mode,
             "total_time": self.metrics["total_time"],
             "metrics": self.metrics,
+            "timing_metrics": self._timer.metrics,
             "records_processed": len(self.df) if self.df is not None else 0,
             "output_location": str(output_location),
             "use_iceberg": self.use_iceberg,

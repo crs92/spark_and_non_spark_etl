@@ -39,6 +39,7 @@ from src.etl.data_quality import (
     DataQualityReport,
 )
 from src.etl.iceberg_config import IcebergConfig
+from src.etl.timing_decorator import PipelineTimer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -82,6 +83,10 @@ def run_spark_etl(
     else:
         logger.info("Output: %s", output_path)
 
+    # Initialize timing
+    timer = PipelineTimer(framework="spark", mode=mode)
+    timer.start_pipeline()
+
     total_start = time.time()
     metrics = {
         "read_time": 0.0,
@@ -96,6 +101,7 @@ def run_spark_etl(
         quality_config = DataQualityConfig()
 
     # Initialize Spark session with distributed configuration
+    spark_init_start = time.time()
     spark_builder = (
         SparkSession.builder.appName("SparkETL")
         .config("spark.sql.adaptive.enabled", "true")
@@ -187,9 +193,13 @@ def run_spark_etl(
 
     spark = spark_builder.getOrCreate()
 
+    # Track Spark initialization time
+    timer.metrics["startup_time"] = time.time() - spark_init_start
+
     # Log Spark configuration
     logger.info("Spark Master: %s", spark.sparkContext.master)
     logger.info("Spark App Name: %s", spark.sparkContext.appName)
+    logger.info("Spark initialization took %.2fs", timer.metrics["startup_time"])
 
     # Read data based on mode
     logger.info("Reading data in %s mode...", mode)
@@ -226,9 +236,13 @@ def run_spark_etl(
             raise ValueError(f"No incremental files found in {input_path_obj}")
 
     metrics["read_time"] = time.time() - read_start
+    timer.metrics["extract"]["total"] = metrics["read_time"]
+
     logger.info(
         "Read completed in %.2fs - %d records loaded", metrics["read_time"], df.count()
     )
+
+    timer.sample_memory()
 
     # Initialize quality tracking
     logger.info("Applying data quality checks...")
@@ -358,7 +372,11 @@ def run_spark_etl(
         )
 
     metrics["quality_check_time"] = time.time() - quality_start
+    timer.metrics["transform"]["quality_checks"] = metrics["quality_check_time"]
+
     logger.info("Quality checks completed in %.2fs", metrics["quality_check_time"])
+
+    timer.sample_memory()
 
     # Implement proper sessionization with 30-minute inactivity window
     logger.info("Applying sessionization logic...")
@@ -424,7 +442,15 @@ def run_spark_etl(
     )
 
     metrics["sessionization_time"] = time.time() - sessionization_start
+    timer.metrics["transform"]["sessionization"] = metrics["sessionization_time"]
+    timer.metrics["transform"]["total"] = (
+        timer.metrics["transform"]["quality_checks"]
+        + timer.metrics["transform"]["sessionization"]
+    )
+
     logger.info("Sessionization completed in %.2fs", metrics["sessionization_time"])
+
+    timer.sample_memory()
 
     # For incremental mode, merge with bulk data if provided
     if mode == "incremental" and bulk_data_path:
@@ -584,7 +610,12 @@ def run_spark_etl(
         output_location = str(output_file)
 
     metrics["write_time"] = time.time() - write_start
+    timer.metrics["load"]["write"] = metrics["write_time"]
+    timer.metrics["load"]["total"] = metrics["write_time"]
+
     logger.info("Write completed in %.2fs", metrics["write_time"])
+
+    timer.sample_memory()
 
     # Create data quality report
     final_count = df_processed.count()
@@ -602,6 +633,9 @@ def run_spark_etl(
 
     metrics["total_time"] = time.time() - total_start
 
+    # End pipeline timing
+    timer.end_pipeline()
+
     logger.info("=" * 60)
     logger.info("Pipeline completed in %.2fs", metrics["total_time"])
     logger.info("=" * 60)
@@ -613,12 +647,16 @@ def run_spark_etl(
         initial_count,
     )
 
+    # Log timing summary
+    timer.log_summary()
+
     spark.stop()
 
     return {
         "mode": mode,
         "total_time": metrics["total_time"],
         "metrics": metrics,
+        "timing_metrics": timer.metrics,
         "records_processed": final_count,
         "output_location": output_location,
         "use_iceberg": use_iceberg,
