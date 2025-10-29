@@ -21,7 +21,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 
 # Install all dependencies from pyproject.toml
-RUN uv pip install --system pyspark pyarrow pyiceberg faker
+RUN uv pip install --system pyspark pyarrow pyiceberg
 
 # Copy source code
 COPY src/ ./src/

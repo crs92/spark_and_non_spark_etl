@@ -80,10 +80,33 @@ else
 	@$(PYTHON) -m src.data_generation.cli ${SIZE}
 endif
 
+generate-data-full: ## 📊 Generate complete bulk + incremental data (use SIZE=small|medium|large, default: small)
+	@echo "--- Generating complete bulk + incremental data ---"
+ifeq (${SIZE},)
+	@$(PYTHON) -m src.data_generation.cli small --days 7 --output data/generated
+else
+	@$(PYTHON) -m src.data_generation.cli ${SIZE} --days 7 --output data/generated
+endif
+	@echo "✅ Generated bulk (30 days) + incremental (7 days) data"
+
 benchmark: ## 🏁 Run incremental ETL benchmark
 	@echo "--- Running incremental ETL benchmark ---"
 	@$(PYTHON) scripts/benchmark_incremental.py --input data/generated/clickstream_data_small_simple.csv
 	@echo "Benchmark complete!"
+
+benchmark-full: ## 🏆 Run complete bulk + incremental benchmark for both frameworks (use SIZE=small|medium|large, default: small)
+	@echo "--- Running complete ETL benchmark (bulk + incremental) ---"
+ifeq (${SIZE},)
+	@$(PYTHON) scripts/benchmark_full.py --size small
+else
+	@$(PYTHON) scripts/benchmark_full.py --size ${SIZE}
+endif
+	@echo "Complete benchmark finished!"
+
+benchmark-docker: ## 🐳 Run Docker/Podman benchmark (use SIZE=small|medium|large, default: small)
+	@echo "--- Running Docker/Podman ETL benchmark ---"
+	@DATA_SIZE=${SIZE} bash scripts/benchmark_docker.sh
+	@echo "Docker benchmark finished!"
 
 # Docker commands
 docker-build: ## 🐳 Build both Docker images

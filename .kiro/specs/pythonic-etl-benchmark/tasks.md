@@ -110,43 +110,62 @@
   - Test end-to-end with `make docker-run-spark` and `make docker-run-pythonic`
   - _Requirements: 2.1, 2.2_
 
-- [ ] 6. Implement complete bulk + incremental ETL workflow locally
-- [ ] 6.1 Create bulk + incremental data generation
+- [x] 6. Implement complete bulk + incremental ETL workflow locally
+
+
+
+
+
+- [x] 6.1 Create bulk + incremental data generation
+
+
   - Generate bulk historical data (30 days)
   - Generate incremental daily files (7 days)
   - Organize data in proper directory structure
   - Add CLI command: `make generate-data-full`
   - _Requirements: 4.1, 4.2, 4.3_
 
-- [ ] 6.2 Implement bulk load in Polars ETL
+- [x] 6.2 Implement bulk load in Polars ETL
+
+
   - Load bulk historical data
   - Process and write to output
   - Track metrics (time, memory, records)
   - Test with: `python -m src.etl.polars_etl --mode bulk`
   - _Requirements: 1.1, 1.2, 4.2_
 
-- [ ] 6.3 Implement incremental processing in Polars ETL
+- [x] 6.3 Implement incremental processing in Polars ETL
+
+
   - Load incremental daily files
   - Merge with existing bulk data
   - Handle duplicates and updates
   - Test with: `python -m src.etl.polars_etl --mode incremental`
   - _Requirements: 1.1, 1.2, 4.2_
 
-- [ ] 6.4 Implement bulk load in Spark ETL
+- [x] 6.4 Implement bulk load in Spark ETL
+
+
   - Load bulk historical data
   - Process and write to output
   - Track metrics (time, memory, records)
   - Test with: `python -m src.etl.spark_etl --mode bulk`
   - _Requirements: 1.1, 1.2, 4.2_
 
-- [ ] 6.5 Implement incremental processing in Spark ETL
+- [x] 6.5 Implement incremental processing in Spark ETL
+
+
   - Load incremental daily files
   - Merge with existing bulk data
   - Handle duplicates and updates
   - Test with: `python -m src.etl.spark_etl --mode incremental`
   - _Requirements: 1.1, 1.2, 4.2_
 
-- [ ] 6.6 Create complete ETL benchmark script
+- [x] 6.6 Create complete ETL benchmark script
+
+
+
+
   - Run bulk + incremental for both frameworks
   - Compare performance metrics
   - Generate comparison report

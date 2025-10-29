@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "polars",
     "pyarrow",
-    "pyiceberg",
+    "pyiceberg[sql-sqlite]",
     "duckdb",
     "pyspark", # Include all main dependencies here
     "faker",

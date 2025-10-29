@@ -27,8 +27,7 @@ RUN uv pip install --system \
     polars \
     pyarrow \
     pyiceberg \
-    duckdb \
-    faker
+    duckdb
 
 # Copy source code
 COPY src/ ./src/
