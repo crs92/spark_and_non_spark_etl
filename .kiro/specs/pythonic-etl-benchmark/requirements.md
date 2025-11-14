@@ -60,3 +60,26 @@ This PoC demonstrates a comprehensive benchmark comparing a modern Python-native
 2. WHEN running tests THEN the system SHALL support different data generation patterns and ETL complexity levels
 3. WHEN comparing results THEN the system SHALL enable side-by-side execution with identical input data and logic
 4. IF custom scenarios are needed THEN the system SHALL provide extensible framework for adding new benchmark cases
+
+### Requirement 6
+
+**User Story:** As a cloud architect, I want to deploy and run large-scale benchmarks on AWS EKS with datasets exceeding 100M records, so that I can evaluate performance at production scale.
+
+#### Acceptance Criteria
+
+1. WHEN deploying to AWS THEN the system SHALL provision EKS cluster with appropriate node groups for Spark and Polars workloads
+2. WHEN running Spark on EKS THEN the system SHALL use Spark Operator for native Kubernetes integration and dynamic resource allocation
+3. WHEN storing data THEN the system SHALL use S3 for input/output data with proper IAM roles and bucket policies
+4. WHEN generating large datasets THEN the system SHALL support data sizes from 10M to 500M records stored in S3
+5. WHEN monitoring cloud resources THEN the system SHALL track EKS pod metrics, S3 I/O, and AWS costs
+
+### Requirement 7
+
+**User Story:** As a cost-conscious engineer, I want to track and optimize cloud infrastructure costs during benchmarking, so that I can make cost-effective technology decisions.
+
+#### Acceptance Criteria
+
+1. WHEN running benchmarks on AWS THEN the system SHALL calculate estimated costs based on EC2 instance hours and S3 storage
+2. WHEN comparing frameworks THEN the system SHALL include cost-per-record and cost-per-GB metrics in performance reports
+3. WHEN using spot instances THEN the system SHALL support cost optimization strategies for non-critical workloads
+4. WHEN benchmarks complete THEN the system SHALL generate cost analysis reports comparing total cost of ownership

@@ -224,8 +224,13 @@
   - ✅ Performance: ~37s bulk write, ~38s incremental merge (100K records)
   - _Requirements: 1.1, 2.3, 4.2_
 
-- [ ] 9. Implement detailed ETL timing and performance analysis
-- [ ] 9.1 Add granular timing metrics to ETL scripts
+- [x] 9. Implement detailed ETL timing and performance analysis
+
+
+
+- [x] 9.1 Add granular timing metrics to ETL scripts
+
+
   - Track container/image metrics (size, build time, startup time)
   - Track Spark session initialization time separately
   - Break down ETL phases: Extract, Transform, Load with sub-metrics
@@ -233,7 +238,9 @@
   - Export detailed timing data to JSON
   - _Requirements: 3.1, 3.2, 4.4_
 
-- [ ] 9.2 Create comprehensive performance report generator
+- [x] 9.2 Create comprehensive performance report generator
+
+
   - Generate reports for small, medium, large datasets
   - Create timing breakdown tables and charts
   - Identify performance bottlenecks by phase
@@ -352,3 +359,204 @@
   - Create comprehensive user documentation and troubleshooting guides
   - Write validation tests for documentation accuracy and completeness
   - _Requirements: 1.1, 1.2, 2.1, 2.2, 3.3, 4.4_
+
+- [ ] 17. Implement AWS EKS infrastructure provisioning
+- [ ] 17.1 Create Terraform configuration for EKS cluster
+  - Write Terraform module for EKS cluster with version 1.28+
+  - Configure VPC with public and private subnets across 3 availability zones
+  - Create node groups: spark_workers (r6i.2xlarge) and polars_workers (r6i.8xlarge)
+  - Implement auto-scaling configuration with min/max/desired instance counts
+  - Add IAM roles and policies for EKS cluster and node groups
+  - Configure security groups for pod-to-pod and pod-to-S3 communication
+  - _Requirements: 2.3, 6.1, 6.2_
+
+- [ ] 17.2 Create Terraform configuration for S3 and ECR
+  - Write Terraform module for S3 bucket with versioning and lifecycle policies
+  - Configure S3 bucket policies and IAM roles for EKS pod access
+  - Create ECR repositories for spark-etl and polars-etl images
+  - Implement ECR lifecycle policies for image retention and cleanup
+  - Add S3 intelligent tiering for cost optimization
+  - Configure cross-region replication for data durability (optional)
+  - _Requirements: 2.3, 4.2, 6.1_
+
+- [ ] 17.3 Implement Terraform deployment scripts and validation
+  - Create Makefile targets for terraform init/plan/apply/destroy
+  - Write validation scripts to verify EKS cluster health and connectivity
+  - Implement kubectl configuration automation for cluster access
+  - Add AWS credentials and region configuration management
+  - Create infrastructure teardown and cleanup scripts
+  - Write documentation for infrastructure provisioning process
+  - _Requirements: 2.3, 2.4, 6.1_
+
+- [ ] 18. Deploy Spark Operator and configure Spark on EKS
+- [ ] 18.1 Install and configure Spark Operator
+  - Install Spark Operator using Helm chart (version 1.3.0+)
+  - Configure Spark Operator namespace and RBAC permissions
+  - Create ServiceAccount with IAM role for S3 access (IRSA)
+  - Configure Spark Operator webhook and admission controller
+  - Verify Spark Operator installation and readiness
+  - _Requirements: 2.2, 2.3, 6.2_
+
+- [ ] 18.2 Create SparkApplication manifest for ETL benchmark
+  - Write SparkApplication YAML with driver and executor configurations
+  - Configure Spark properties for S3 access (s3a filesystem)
+  - Set resource requests and limits for driver and executor pods
+  - Add environment variables for AWS credentials and S3 bucket paths
+  - Configure Spark dynamic allocation and executor scaling
+  - Implement pod affinity rules for optimal node placement
+  - _Requirements: 1.1, 2.2, 2.3, 6.2_
+
+- [ ] 18.3 Build and push Spark Docker image to ECR
+  - Create Dockerfile.spark with Spark 3.5.0 and Python 3.11
+  - Install required Python dependencies (pyspark, pyiceberg, boto3)
+  - Copy ETL source code and scripts into container image
+  - Configure AWS Hadoop libraries for S3 access
+  - Build Docker image and tag with version
+  - Push image to ECR repository with authentication
+  - _Requirements: 2.1, 2.2, 2.3_
+
+- [ ] 19. Configure Polars workload for EKS deployment
+- [ ] 19.1 Create Kubernetes Job manifest for Polars ETL
+  - Write Kubernetes Job YAML with high-memory pod configuration
+  - Configure resource requests (32Gi memory, 8 CPU) and limits (64Gi, 16 CPU)
+  - Add ServiceAccount with IAM role for S3 access
+  - Set environment variables for S3 bucket paths and AWS region
+  - Configure node selector for polars_workers node group
+  - Implement job completion and failure handling policies
+  - _Requirements: 1.1, 2.2, 2.3, 6.2_
+
+- [ ] 19.2 Build and push Polars Docker image to ECR
+  - Create Dockerfile.polars with Python 3.11-slim base image
+  - Install Polars, PyArrow, PyIceberg, boto3, and s3fs dependencies
+  - Copy ETL source code and scripts into container image
+  - Configure AWS credentials provider for S3 access
+  - Build Docker image and tag with version
+  - Push image to ECR repository with authentication
+  - _Requirements: 2.1, 2.2, 2.3_
+
+- [ ] 19.3 Update Polars ETL code for S3 compatibility
+  - Modify polars_etl.py to support s3:// paths using s3fs
+  - Add S3 path validation and bucket existence checks
+  - Implement retry logic for S3 transient errors
+  - Update Iceberg catalog configuration for S3-backed warehouse
+  - Add S3 multipart upload for large output files
+  - Test S3 read/write operations with sample data
+  - _Requirements: 1.1, 2.3, 4.2, 6.2_
+
+- [ ] 20. Implement large-scale data generation for cloud benchmarking
+- [ ] 20.1 Extend data generator for 10M-500M record datasets
+  - Update ClickstreamDataGenerator to support xlarge (100M) and xxlarge (500M) sizes
+  - Implement chunked data generation to avoid memory exhaustion
+  - Add progress tracking and estimated time remaining for large datasets
+  - Optimize Parquet writing with appropriate row group sizes
+  - Add data validation and checksum generation for integrity verification
+  - _Requirements: 4.3, 6.4_
+
+- [ ] 20.2 Create S3 upload script for benchmark datasets
+  - Write Python script to upload generated data to S3 bucket
+  - Implement multipart upload for files larger than 5GB
+  - Add progress bar and upload speed tracking
+  - Configure S3 storage class (Standard vs Intelligent Tiering)
+  - Implement parallel uploads for multiple files
+  - Add data verification after upload (size, checksum)
+  - _Requirements: 2.3, 4.2, 6.4_
+
+- [ ] 20.3 Create data generation orchestration for all sizes
+  - Write script to generate all benchmark sizes (small, medium, large, xlarge)
+  - Implement parallel generation for multiple sizes
+  - Add automatic S3 upload after generation completes
+  - Create manifest file with dataset metadata (size, records, checksum)
+  - Implement cleanup of local files after successful upload
+  - Add Makefile targets for cloud data generation workflow
+  - _Requirements: 4.3, 5.1, 6.4_
+
+- [ ] 21. Implement EKS benchmark orchestration and execution
+- [ ] 21.1 Create benchmark runner for EKS deployments
+  - Write Python script to orchestrate Spark and Polars job submissions
+  - Implement kubectl integration for job creation and monitoring
+  - Add job status polling and completion detection
+  - Implement timeout handling and job cancellation
+  - Create log collection from completed pods
+  - Add error handling and retry logic for failed jobs
+  - _Requirements: 1.2, 2.3, 5.1_
+
+- [ ] 21.2 Implement CloudWatch metrics collection
+  - Configure CloudWatch Container Insights for EKS cluster
+  - Create Python script to query CloudWatch metrics for benchmark pods
+  - Collect CPU, memory, network I/O metrics during job execution
+  - Implement S3 request metrics collection (GET/PUT counts, bytes transferred)
+  - Add custom metrics for ETL-specific operations
+  - Export metrics to JSON for analysis and reporting
+  - _Requirements: 1.2, 4.4, 6.5_
+
+- [ ] 21.3 Create end-to-end EKS benchmark workflow
+  - Write orchestration script for complete benchmark execution
+  - Implement sequential execution: Spark job → Polars job → metrics collection
+  - Add result validation and output verification
+  - Create benchmark results download from S3 to local machine
+  - Implement cleanup of completed jobs and pods
+  - Add Makefile targets for EKS benchmark execution
+  - _Requirements: 1.1, 1.2, 2.3, 3.1_
+
+- [ ] 22. Implement AWS cost tracking and analysis
+- [ ] 22.1 Create cost calculation module
+  - Write Python module to calculate EC2 instance costs based on runtime
+  - Implement S3 storage and request cost calculations
+  - Add data transfer cost estimation
+  - Create cost-per-record and cost-per-GB metrics
+  - Implement cost comparison between Spark and Polars workloads
+  - _Requirements: 7.1, 7.2, 7.3_
+
+- [ ] 22.2 Integrate cost tracking into benchmark reports
+  - Add cost metrics to performance report generator
+  - Create cost comparison tables and visualizations
+  - Implement TCO (Total Cost of Ownership) analysis
+  - Add cost optimization recommendations based on workload characteristics
+  - Generate cost projection for different data scales
+  - Update PowerPoint presentation generator with cost slides
+  - _Requirements: 3.1, 3.2, 7.1, 7.4_
+
+- [ ] 23. Create CI/CD pipeline for EKS deployment
+- [ ] 23.1 Implement GitHub Actions workflow for infrastructure
+  - Create workflow for Terraform plan on pull requests
+  - Implement Terraform apply on merge to main branch
+  - Add infrastructure validation and health checks
+  - Configure AWS credentials using OIDC provider
+  - Implement infrastructure drift detection
+  - _Requirements: 2.3, 2.4_
+
+- [ ] 23.2 Implement GitHub Actions workflow for container builds
+  - Create workflow to build Docker images on code changes
+  - Implement ECR authentication and image push
+  - Add image vulnerability scanning with Trivy
+  - Configure image tagging strategy (git SHA, semantic version)
+  - Implement multi-architecture builds (amd64, arm64)
+  - Add build caching for faster CI/CD execution
+  - _Requirements: 2.1, 2.3_
+
+- [ ] 23.3 Create automated benchmark execution workflow
+  - Write GitHub Actions workflow for scheduled benchmark runs
+  - Implement benchmark execution on EKS cluster
+  - Add automatic results collection and artifact upload
+  - Create benchmark result comparison with previous runs
+  - Implement performance regression detection and alerting
+  - Add workflow for manual benchmark triggering with parameters
+  - _Requirements: 1.2, 3.1, 3.3_
+
+- [ ] 24. Create comprehensive EKS deployment documentation
+- [ ] 24.1 Write infrastructure setup guide
+  - Document AWS prerequisites (account, IAM permissions, CLI setup)
+  - Create step-by-step Terraform deployment instructions
+  - Add EKS cluster access and kubectl configuration guide
+  - Document Spark Operator installation and verification
+  - Create troubleshooting guide for common infrastructure issues
+  - _Requirements: 2.3, 3.3_
+
+- [ ] 24.2 Write benchmark execution guide for EKS
+  - Document data generation and S3 upload process
+  - Create guide for submitting Spark and Polars jobs to EKS
+  - Add instructions for monitoring job execution and logs
+  - Document metrics collection and result analysis
+  - Create cost tracking and optimization guide
+  - Add examples of benchmark configurations and customization
+  - _Requirements: 1.2, 3.3, 5.1, 7.1_

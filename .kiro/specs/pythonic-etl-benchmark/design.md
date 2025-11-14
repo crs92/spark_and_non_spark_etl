@@ -64,6 +64,56 @@ The system follows a modular architecture with clear separation of concerns:
 3. **Infrastructure Services**: Shared data storage and catalog services
 4. **Deployment Adapters**: Environment-specific deployment and monitoring logic
 
+### AWS EKS Architecture
+
+```mermaid
+graph TB
+    subgraph "AWS Cloud"
+        subgraph "EKS Cluster"
+            SO[Spark Operator]
+            SD[Spark Driver Pod]
+            SE1[Spark Executor Pod 1]
+            SE2[Spark Executor Pod 2]
+            SE3[Spark Executor Pod 3]
+            PJ[Polars Job Pod]
+
+            SO --> SD
+            SD --> SE1
+            SD --> SE2
+            SD --> SE3
+        end
+
+        subgraph "Storage"
+            S3[S3 Bucket]
+            ECR[ECR Registry]
+        end
+
+        subgraph "Monitoring"
+            CW[CloudWatch]
+            CM[Container Insights]
+        end
+    end
+
+    SD --> S3
+    SE1 --> S3
+    SE2 --> S3
+    SE3 --> S3
+    PJ --> S3
+
+    EKS --> CW
+    EKS --> CM
+
+    ECR --> SD
+    ECR --> PJ
+```
+
+**EKS Deployment Strategy**:
+- **Spark Workloads**: Spark Operator manages SparkApplication CRDs with dynamic executor scaling
+- **Polars Workloads**: Kubernetes Jobs with high-memory node allocation
+- **Data Storage**: S3 for input/output with s3a:// protocol
+- **Container Images**: ECR for Docker image storage and versioning
+- **Resource Monitoring**: CloudWatch Container Insights for pod-level metrics
+
 ## Components and Interfaces
 
 ### Benchmark Controller
@@ -313,3 +363,99 @@ class ErrorHandler:
 - **Environment Isolation**: Ensure tests don't interfere with each other
 - **Resource Cleanup**: Automatic cleanup of test artifacts and resources
 - **Configuration Management**: Maintain test configurations and baselines
+
+## AWS EKS Deployment Design
+
+### Infrastructure as Code
+
+**Terraform Modules**:
+```hcl
+# EKS Cluster with node groups
+module "eks" {
+  cluster_name = "etl-benchmark-cluster"
+  node_groups = {
+    spark_workers: r6i.2xlarge (8 vCPU, 64GB)
+    polars_workers: r6i.8xlarge (32 vCPU, 256GB)
+  }
+}
+
+# S3 Bucket for data storage
+module "s3" {
+  bucket_name = "etl-benchmark-data-${account_id}"
+  versioning = enabled
+  lifecycle_rules = intelligent_tiering
+}
+
+# ECR Repository for container images
+module "ecr" {
+  repositories = ["spark-etl", "polars-etl"]
+  image_scanning = enabled
+}
+```
+
+### Spark Operator Configuration
+
+**SparkApplication CRD**:
+```yaml
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-etl-benchmark
+spec:
+  type: Python
+  mode: cluster
+  image: ${ECR_REPO}/spark-etl:${VERSION}
+  mainApplicationFile: s3a://bucket/scripts/spark_etl.py
+
+  sparkConf:
+    spark.hadoop.fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+    spark.hadoop.fs.s3a.aws.credentials.provider: com.amazonaws.auth.WebIdentityTokenCredentialsProvider
+
+  driver:
+    cores: 2
+    memory: "4g"
+    serviceAccount: spark-sa
+
+  executor:
+    cores: 4
+    memory: "8g"
+    instances: 3
+```
+
+### Large-Scale Data Generation
+
+**Data Sizes for Cloud Benchmarking**:
+- **Small**: 10M records (~1GB Parquet)
+- **Medium**: 50M records (~5GB Parquet)
+- **Large**: 100M records (~10GB Parquet)
+- **XLarge**: 500M records (~50GB Parquet)
+
+**S3 Data Organization**:
+```
+s3://etl-benchmark-data/
+├── input/
+│   ├── small/
+│   │   ├── bulk/*.parquet
+│   │   └── incremental/*.parquet
+│   ├── medium/
+│   ├── large/
+│   └── xlarge/
+└── output/
+    ├── spark/
+    └── polars/
+```
+
+### Cost Tracking and Optimization
+
+**Cost Calculation Components**:
+- **EC2 Compute**: Instance hours × hourly rate
+- **S3 Storage**: GB-month × storage rate
+- **S3 Requests**: GET/PUT requests × request rate
+- **Data Transfer**: GB transferred × transfer rate
+- **EKS Control Plane**: $0.10/hour
+
+**Optimization Strategies**:
+- Use Spot Instances for worker nodes (60-90% savings)
+- Auto-scale to zero when idle
+- S3 Intelligent Tiering for data lifecycle
+- Graviton instances (r7g) for 20% cost reduction
