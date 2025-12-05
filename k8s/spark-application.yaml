@@ -1,0 +1,180 @@
+---
+# SparkApplication for ETL Benchmark on EKS
+# This manifest defines a Spark application that runs the ETL benchmark workload
+# using the Spark Operator on AWS EKS with S3 storage
+
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-etl-benchmark
+  namespace: default
+  labels:
+    app: spark-etl
+    benchmark: pythonic-etl
+    version: v1
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+
+  # Container image from ECR
+  # Replace with actual ECR repository URL from: terraform output ecr_repository_urls
+  image: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/spark-etl:latest"
+  imagePullPolicy: Always
+
+  # Main Python application file
+  # This should be uploaded to S3 or included in the container image
+  mainApplicationFile: "local:///app/src/etl/spark_etl.py"
+
+  # Arguments passed to the Spark application
+  arguments:
+    - "--mode"
+    - "bulk"  # Change to "incremental" for incremental processing
+    - "--input-path"
+    - "s3a://BUCKET_NAME/input/medium/bulk/"
+    - "--output-path"
+    - "s3a://BUCKET_NAME/output/spark/"
+    - "--format"
+    - "parquet"
+
+  # Spark version
+  sparkVersion: "3.5.0"
+
+  # Spark configuration for S3 access and performance tuning
+  sparkConf:
+    # S3A Configuration for Pod Identity
+    # Pod Identity automatically provides credentials via the EKS Pod Identity Agent
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+    "spark.hadoop.fs.s3a.fast.upload": "true"
+    "spark.hadoop.fs.s3a.block.size": "128M"
+    "spark.hadoop.fs.s3a.multipart.size": "128M"
+    "spark.hadoop.fs.s3a.connection.maximum": "100"
+
+    # Performance tuning
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.sql.adaptive.skewJoin.enabled": "true"
+    "spark.sql.shuffle.partitions": "200"
+    "spark.default.parallelism": "100"
+
+    # Memory management
+    "spark.memory.fraction": "0.8"
+    "spark.memory.storageFraction": "0.3"
+    "spark.executor.memoryOverhead": "1024"
+
+    # Serialization
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer"
+    "spark.kryoserializer.buffer.max": "512m"
+
+    # Event log for Spark History Server (optional)
+    "spark.eventLog.enabled": "false"
+    # "spark.eventLog.dir": "s3a://BUCKET_NAME/spark-logs/"
+
+  # Hadoop configuration for S3 access
+  hadoopConf:
+    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+
+  # Driver configuration
+  driver:
+    cores: 2
+    coreLimit: "2000m"
+    memory: "4g"
+
+    # ServiceAccount with Pod Identity for S3 access
+    # No annotations needed - Pod Identity Association configured in Terraform
+    serviceAccount: spark-sa
+
+    labels:
+      version: "3.5.0"
+      app: spark-etl-driver
+
+    # Environment variables
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"  # Replace with actual region
+      - name: PYTHONPATH
+        value: "/app"
+      - name: BENCHMARK_SIZE
+        value: "medium"
+
+    # Volume mounts (if needed for local files)
+    # volumeMounts:
+    #   - name: app-code
+    #     mountPath: /app
+
+  # Executor configuration
+  executor:
+    cores: 4
+    coreLimit: "4000m"
+    memory: "8g"
+    instances: 3
+
+    labels:
+      version: "3.5.0"
+      app: spark-etl-executor
+
+    # Environment variables
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"  # Replace with actual region
+      - name: PYTHONPATH
+        value: "/app"
+
+  # Dynamic allocation (optional - enables auto-scaling of executors)
+  dynamicAllocation:
+    enabled: true
+    initialExecutors: 2
+    minExecutors: 2
+    maxExecutors: 10
+    shuffleTrackingTimeout: 60s
+
+  # Restart policy
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 3
+    onFailureRetryInterval: 10
+    onSubmissionFailureRetries: 5
+    onSubmissionFailureRetryInterval: 20
+
+  # Monitoring
+  monitoring:
+    exposeDriverMetrics: true
+    exposeExecutorMetrics: true
+    prometheus:
+      jmxExporterJar: "/prometheus/jmx_prometheus_javaagent-0.17.0.jar"
+      port: 8090
+
+  # Time to live for completed applications (cleanup)
+  timeToLiveSeconds: 3600  # 1 hour
+
+  # Volumes (if needed)
+  # volumes:
+  #   - name: app-code
+  #     configMap:
+  #       name: spark-app-code
+
+---
+# ConfigMap for application configuration (optional)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spark-etl-config
+  namespace: default
+data:
+  benchmark.conf: |
+    # Benchmark configuration
+    data_sizes:
+      small: 10000000    # 10M records
+      medium: 50000000   # 50M records
+      large: 100000000   # 100M records
+      xlarge: 500000000  # 500M records
+
+    s3_paths:
+      input_base: "s3a://BUCKET_NAME/input/"
+      output_base: "s3a://BUCKET_NAME/output/"
+
+    spark_config:
+      shuffle_partitions: 200
+      default_parallelism: 100

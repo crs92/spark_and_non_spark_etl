@@ -1,0 +1,44 @@
+---
+# Test Pod to verify Pod Identity S3 access
+# This pod uses the AWS CLI to test S3 permissions
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-identity-spark
+  namespace: default
+  labels:
+    app: test-pod-identity
+spec:
+  serviceAccountName: spark-sa
+  containers:
+  - name: aws-cli
+    image: amazon/aws-cli:latest
+    command:
+      - sleep
+      - "3600"
+    env:
+    - name: AWS_REGION
+      value: "us-east-1"
+  restartPolicy: Never
+
+---
+# Test Pod for Polars ServiceAccount
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-identity-polars
+  namespace: default
+  labels:
+    app: test-pod-identity
+spec:
+  serviceAccountName: polars-sa
+  containers:
+  - name: aws-cli
+    image: amazon/aws-cli:latest
+    command:
+      - sleep
+      - "3600"
+    env:
+    - name: AWS_REGION
+      value: "us-east-1"
+  restartPolicy: Never

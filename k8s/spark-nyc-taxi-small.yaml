@@ -1,0 +1,148 @@
+---
+# SparkApplication for NYC Taxi ETL - SMALL Dataset (1 year)
+# Dataset: 2022 (12 months, ~1.2GB, 40M records)
+# Configuration: 3 executors, 4 cores, 8GB each
+# Use case: Small-scale production workload
+
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-nyc-taxi-small
+  namespace: default
+  labels:
+    app: spark-etl
+    dataset: nyc-taxi
+    data-size: small
+    benchmark: vertical-vs-horizontal
+    cost-tracking: enabled
+    version: v1
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+
+  # Container image from ECR
+  # Replace ACCOUNT_ID and REGION with actual values from: terraform output
+  image: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/spark-etl:latest"
+  imagePullPolicy: Always
+
+  # Main Python application file (included in container image)
+  mainApplicationFile: "local:///app/src/etl/spark_etl_nyc_taxi.py"
+
+  # Arguments for NYC Taxi ETL - SMALL dataset
+  arguments:
+    - "--size"
+    - "small"
+    - "--output"
+    - "/tmp/output"
+    - "--s3-bucket"
+    - "s3://etl-benchmark-data-ACCOUNT_ID"  # Replace with actual bucket name
+
+  # Spark version
+  sparkVersion: "3.5.0"
+
+  # Spark configuration optimized for SMALL dataset
+  sparkConf:
+    # S3A Configuration for Pod Identity
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+    "spark.hadoop.fs.s3a.fast.upload": "true"
+    "spark.hadoop.fs.s3a.block.size": "128M"
+    "spark.hadoop.fs.s3a.multipart.size": "128M"
+    "spark.hadoop.fs.s3a.connection.maximum": "75"
+
+    # Performance tuning for small dataset
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.sql.adaptive.skewJoin.enabled": "true"
+    "spark.sql.files.maxPartitionBytes": "134217728"  # 128MB
+    "spark.sql.shuffle.partitions": "50"
+    "spark.default.parallelism": "12"
+
+    # Memory management
+    "spark.memory.fraction": "0.8"
+    "spark.memory.storageFraction": "0.3"
+    "spark.executor.memoryOverhead": "1024"
+
+    # Serialization
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer"
+    "spark.kryoserializer.buffer.max": "512m"
+
+    # Parquet optimization
+    "spark.sql.parquet.compression.codec": "snappy"
+    "spark.sql.parquet.mergeSchema": "false"
+    "spark.sql.parquet.filterPushdown": "true"
+
+  # Hadoop configuration
+  hadoopConf:
+    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+
+  # Driver configuration
+  driver:
+    cores: 2
+    coreLimit: "2000m"
+    memory: "4g"
+
+    # ServiceAccount with Pod Identity (no annotations needed!)
+    serviceAccount: spark-sa
+
+    labels:
+      version: "3.5.0"
+      app: spark-nyc-taxi-driver
+      workload: etl
+      data-size: small
+      cost-center: benchmark
+
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: PYTHONPATH
+        value: "/app"
+      - name: BENCHMARK_NAME
+        value: "nyc-taxi-etl-small"
+      - name: DATA_SIZE
+        value: "small"
+
+  # Executor configuration - 3 executors for small dataset
+  executor:
+    cores: 4
+    coreLimit: "4000m"
+    memory: "8g"
+    instances: 3  # Fixed for small dataset
+
+    labels:
+      version: "3.5.0"
+      app: spark-nyc-taxi-executor
+      workload: etl
+      data-size: small
+      cost-center: benchmark
+
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: PYTHONPATH
+        value: "/app"
+
+  # Dynamic allocation disabled for consistent benchmarking
+  dynamicAllocation:
+    enabled: false
+
+  # Restart policy
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 2
+    onFailureRetryInterval: 10
+    onSubmissionFailureRetries: 3
+    onSubmissionFailureRetryInterval: 20
+
+  # Monitoring
+  monitoring:
+    exposeDriverMetrics: true
+    exposeExecutorMetrics: true
+    prometheus:
+      jmxExporterJar: "/prometheus/jmx_prometheus_javaagent-0.17.0.jar"
+      port: 8090
+
+  # Cleanup after 1 hour
+  timeToLiveSeconds: 3600

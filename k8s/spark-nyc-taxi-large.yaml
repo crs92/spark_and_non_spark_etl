@@ -1,0 +1,152 @@
+---
+# SparkApplication for NYC Taxi ETL - LARGE Dataset (5 years)
+# Dataset: 2018-2022 (60 months, ~10GB, 200M records)
+# Configuration: 10 executors, 4 cores, 16GB each
+# Use case: Large-scale production workload
+
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-nyc-taxi-large
+  namespace: default
+  labels:
+    app: spark-etl
+    dataset: nyc-taxi
+    data-size: large
+    benchmark: vertical-vs-horizontal
+    cost-tracking: enabled
+    version: v1
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+
+  # Container image from ECR
+  # Replace ACCOUNT_ID and REGION with actual values from: terraform output
+  image: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/spark-etl:latest"
+  imagePullPolicy: Always
+
+  # Main Python application file (included in container image)
+  mainApplicationFile: "local:///app/src/etl/spark_etl_nyc_taxi.py"
+
+  # Arguments for NYC Taxi ETL - LARGE dataset
+  arguments:
+    - "--size"
+    - "large"
+    - "--output"
+    - "/tmp/output"
+    - "--s3-bucket"
+    - "s3://etl-benchmark-data-ACCOUNT_ID"  # Replace with actual bucket name
+
+  # Spark version
+  sparkVersion: "3.5.0"
+
+  # Spark configuration optimized for LARGE dataset
+  sparkConf:
+    # S3A Configuration for Pod Identity
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+    "spark.hadoop.fs.s3a.fast.upload": "true"
+    "spark.hadoop.fs.s3a.block.size": "128M"
+    "spark.hadoop.fs.s3a.multipart.size": "128M"
+    "spark.hadoop.fs.s3a.connection.maximum": "150"
+
+    # Performance tuning for large dataset
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.sql.adaptive.skewJoin.enabled": "true"
+    "spark.sql.files.maxPartitionBytes": "134217728"  # 128MB
+    "spark.sql.shuffle.partitions": "200"
+    "spark.default.parallelism": "40"
+
+    # Memory management - optimized for large dataset
+    "spark.memory.fraction": "0.8"
+    "spark.memory.storageFraction": "0.3"
+    "spark.executor.memoryOverhead": "2048"
+
+    # Serialization
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer"
+    "spark.kryoserializer.buffer.max": "512m"
+
+    # Parquet optimization
+    "spark.sql.parquet.compression.codec": "snappy"
+    "spark.sql.parquet.mergeSchema": "false"
+    "spark.sql.parquet.filterPushdown": "true"
+
+    # Network optimization for distributed processing
+    "spark.network.timeout": "800s"
+    "spark.executor.heartbeatInterval": "60s"
+
+  # Hadoop configuration
+  hadoopConf:
+    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+
+  # Driver configuration
+  driver:
+    cores: 2
+    coreLimit: "2000m"
+    memory: "4g"
+
+    # ServiceAccount with Pod Identity (no annotations needed!)
+    serviceAccount: spark-sa
+
+    labels:
+      version: "3.5.0"
+      app: spark-nyc-taxi-driver
+      workload: etl
+      data-size: large
+      cost-center: benchmark
+
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: PYTHONPATH
+        value: "/app"
+      - name: BENCHMARK_NAME
+        value: "nyc-taxi-etl-large"
+      - name: DATA_SIZE
+        value: "large"
+
+  # Executor configuration - 10 executors for large dataset
+  executor:
+    cores: 4
+    coreLimit: "4000m"
+    memory: "16g"
+    instances: 10  # Fixed for large dataset
+
+    labels:
+      version: "3.5.0"
+      app: spark-nyc-taxi-executor
+      workload: etl
+      data-size: large
+      cost-center: benchmark
+
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: PYTHONPATH
+        value: "/app"
+
+  # Dynamic allocation disabled for consistent benchmarking
+  dynamicAllocation:
+    enabled: false
+
+  # Restart policy
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 2
+    onFailureRetryInterval: 10
+    onSubmissionFailureRetries: 3
+    onSubmissionFailureRetryInterval: 20
+
+  # Monitoring
+  monitoring:
+    exposeDriverMetrics: true
+    exposeExecutorMetrics: true
+    prometheus:
+      jmxExporterJar: "/prometheus/jmx_prometheus_javaagent-0.17.0.jar"
+      port: 8090
+
+  # Cleanup after 3 hours
+  timeToLiveSeconds: 10800

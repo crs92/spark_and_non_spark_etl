@@ -1,0 +1,159 @@
+---
+# SparkApplication for NYC Taxi ETL - XLARGE Dataset (8+ years)
+# Dataset: 2015-2022 (96 months, ~50GB, 500M records)
+# Configuration: 20 executors, 4 cores, 16GB each
+# Use case: Very large-scale production workload
+
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-nyc-taxi-xlarge
+  namespace: default
+  labels:
+    app: spark-etl
+    dataset: nyc-taxi
+    data-size: xlarge
+    benchmark: vertical-vs-horizontal
+    cost-tracking: enabled
+    version: v1
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+
+  # Container image from ECR
+  # Replace ACCOUNT_ID and REGION with actual values from: terraform output
+  image: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/spark-etl:latest"
+  imagePullPolicy: Always
+
+  # Main Python application file (included in container image)
+  mainApplicationFile: "local:///app/src/etl/spark_etl_nyc_taxi.py"
+
+  # Arguments for NYC Taxi ETL - XLARGE dataset
+  arguments:
+    - "--size"
+    - "xlarge"
+    - "--output"
+    - "/tmp/output"
+    - "--s3-bucket"
+    - "s3://etl-benchmark-data-ACCOUNT_ID"  # Replace with actual bucket name
+
+  # Spark version
+  sparkVersion: "3.5.0"
+
+  # Spark configuration optimized for XLARGE dataset
+  sparkConf:
+    # S3A Configuration for Pod Identity
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+    "spark.hadoop.fs.s3a.fast.upload": "true"
+    "spark.hadoop.fs.s3a.block.size": "128M"
+    "spark.hadoop.fs.s3a.multipart.size": "128M"
+    "spark.hadoop.fs.s3a.connection.maximum": "200"
+
+    # Performance tuning for xlarge dataset
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.sql.adaptive.skewJoin.enabled": "true"
+    "spark.sql.adaptive.advisoryPartitionSizeInBytes": "134217728"  # 128MB
+    "spark.sql.files.maxPartitionBytes": "134217728"  # 128MB
+    "spark.sql.shuffle.partitions": "400"
+    "spark.default.parallelism": "80"
+
+    # Memory management - optimized for very large dataset
+    "spark.memory.fraction": "0.8"
+    "spark.memory.storageFraction": "0.3"
+    "spark.executor.memoryOverhead": "3072"  # Increased overhead for large dataset
+
+    # Serialization
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer"
+    "spark.kryoserializer.buffer.max": "512m"
+
+    # Parquet optimization
+    "spark.sql.parquet.compression.codec": "snappy"
+    "spark.sql.parquet.mergeSchema": "false"
+    "spark.sql.parquet.filterPushdown": "true"
+
+    # Network optimization for distributed processing
+    "spark.network.timeout": "800s"
+    "spark.executor.heartbeatInterval": "60s"
+    "spark.rpc.message.maxSize": "256"
+
+    # Shuffle optimization
+    "spark.shuffle.compress": "true"
+    "spark.shuffle.spill.compress": "true"
+    "spark.io.compression.codec": "snappy"
+
+  # Hadoop configuration
+  hadoopConf:
+    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+
+  # Driver configuration
+  driver:
+    cores: 2
+    coreLimit: "2000m"
+    memory: "8g"  # Increased driver memory for large dataset
+
+    # ServiceAccount with Pod Identity (no annotations needed!)
+    serviceAccount: spark-sa
+
+    labels:
+      version: "3.5.0"
+      app: spark-nyc-taxi-driver
+      workload: etl
+      data-size: xlarge
+      cost-center: benchmark
+
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: PYTHONPATH
+        value: "/app"
+      - name: BENCHMARK_NAME
+        value: "nyc-taxi-etl-xlarge"
+      - name: DATA_SIZE
+        value: "xlarge"
+
+  # Executor configuration - 20 executors for xlarge dataset
+  executor:
+    cores: 4
+    coreLimit: "4000m"
+    memory: "16g"
+    instances: 20  # Fixed for xlarge dataset
+
+    labels:
+      version: "3.5.0"
+      app: spark-nyc-taxi-executor
+      workload: etl
+      data-size: xlarge
+      cost-center: benchmark
+
+    env:
+      - name: AWS_REGION
+        value: "us-east-1"
+      - name: PYTHONPATH
+        value: "/app"
+
+  # Dynamic allocation disabled for consistent benchmarking
+  dynamicAllocation:
+    enabled: false
+
+  # Restart policy
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 2
+    onFailureRetryInterval: 10
+    onSubmissionFailureRetries: 3
+    onSubmissionFailureRetryInterval: 20
+
+  # Monitoring
+  monitoring:
+    exposeDriverMetrics: true
+    exposeExecutorMetrics: true
+    prometheus:
+      jmxExporterJar: "/prometheus/jmx_prometheus_javaagent-0.17.0.jar"
+      port: 8090
+
+  # Cleanup after 4 hours
+  timeToLiveSeconds: 14400
