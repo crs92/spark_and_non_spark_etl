@@ -1,4 +1,4 @@
-# Pythonic ETL Docker Image (Polars + DuckDB + PyIceberg)
+# Pythonic ETL Docker Image for NYC Taxi Benchmark (Polars + DuckDB + PyIceberg)
 FROM python:3.12-slim
 
 # Set environment variables
@@ -22,24 +22,26 @@ WORKDIR /app
 # Copy dependency files first for better layer caching
 COPY pyproject.toml ./
 
-# Install all dependencies from pyproject.toml using uv
+# Install all dependencies including S3 access libraries
 RUN uv pip install --system \
     polars \
     pyarrow \
     pyiceberg \
-    duckdb
+    duckdb \
+    boto3 \
+    s3fs \
+    fsspec
 
-# Copy source code
+# Copy source code (includes NYC Taxi ETL scripts)
 COPY src/ ./src/
-
-# Copy generated data
-COPY data/ /app/data/
 
 # Create output directory
 RUN mkdir -p /app/output
 
 # Set environment variables
 ENV PYTHONPATH="/app"
+# Configure AWS region (can be overridden at runtime)
+ENV AWS_DEFAULT_REGION="eu-central-1"
 
-# Default command runs the Pythonic ETL with sample data
-CMD ["python", "-m", "src.etl.polars_etl", "5"]
+# Default command runs the NYC Taxi Polars ETL
+CMD ["python", "-m", "src.etl.polars_etl_nyc_taxi", "--size", "tiny"]

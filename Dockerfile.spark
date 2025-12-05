@@ -1,4 +1,4 @@
-# Spark-based ETL Docker Image
+# Spark-based ETL Docker Image for NYC Taxi Benchmark
 FROM python:3.12-slim
 
 # Install system dependencies and Java
@@ -20,22 +20,34 @@ WORKDIR /app
 # Copy dependency files first for better layer caching
 COPY pyproject.toml ./
 
-# Install all dependencies from pyproject.toml
-RUN uv pip install --system pyspark pyarrow pyiceberg
+# Install Python dependencies including S3 access libraries
+RUN uv pip install --system \
+    pyspark \
+    pyarrow \
+    pyiceberg \
+    boto3 \
+    s3fs
 
-# Copy source code
+# Download AWS Hadoop libraries for S3 access (s3a:// protocol)
+# These JARs are required for Spark to access S3
+RUN mkdir -p /app/jars && \
+    curl -L https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
+         -o /app/jars/hadoop-aws-3.3.4.jar && \
+    curl -L https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
+         -o /app/jars/aws-java-sdk-bundle-1.12.262.jar
+
+# Copy source code (includes NYC Taxi ETL scripts)
 COPY src/ ./src/
-
-# Copy generated data
-COPY data/ ./data/
 
 # Set environment variables
 ENV PYTHONPATH="/app"
 ENV PYSPARK_PYTHON="python"
 ENV SPARK_HOME="/usr/local/lib/python3.12/site-packages/pyspark"
+# Add AWS Hadoop JARs to Spark classpath
+ENV SPARK_EXTRA_CLASSPATH="/app/jars/*"
 
 # Expose Spark UI ports
 EXPOSE 4040 4041
 
-# Default command runs the Spark ETL
-CMD ["python", "-m", "src.etl.spark_etl"]
+# Default command runs the NYC Taxi Spark ETL
+CMD ["python", "-m", "src.etl.spark_etl_nyc_taxi", "--size", "tiny"]
