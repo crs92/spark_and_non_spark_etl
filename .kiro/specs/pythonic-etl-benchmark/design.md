@@ -2,67 +2,103 @@
 
 ## Overview
 
-The Modern Pythonic ETL Stack benchmark is designed as a comprehensive performance comparison framework that evaluates Python-native ETL tools (Polars, DuckDB, PyIceberg, PyArrow) against traditional Spark-based ETL pipelines. The system provides automated benchmarking across multiple environments (local Docker, Kubernetes, AWS) with detailed performance metrics collection and analysis.
+The "Vertical vs. Horizontal Scaling" benchmark demonstrates when distributed processing becomes necessary by comparing single-node Polars (EC2) against distributed Spark (EKS). Using the real-world NYC Taxi dataset, we identify the **crossover point** where the complexity of distributed systems becomes justified.
 
-The design emphasizes fair comparison through identical business logic implementation, comprehensive resource monitoring, and scalable test data generation. The benchmark framework generates actionable insights for technology stack selection decisions.
+**Key Design Principles:**
+
+1. **Fair Comparison**: Identical ETL logic, same data source, same AWS region
+2. **Real Data**: NYC Taxi public dataset (no synthetic data generation needed)
+3. **Cost-Focused**: Track TCO including infrastructure, operational overhead, and execution time
+4. **Narrative-Driven**: "Ant vs. Cannon" - when do you need the cannon?
+5. **Production-Ready**: Both implementations use production-grade tools and best practices
+
+**The Question We Answer:** At what data size does the operational complexity of Spark become worth it?
 
 ## Architecture
 
-### High-Level Architecture
+### High-Level Architecture: "Ant vs. Cannon"
 
 ```mermaid
 graph TB
-    subgraph "Benchmark Controller"
-        BC[Benchmark Orchestrator]
-        DG[Data Generator]
-        RM[Resource Monitor]
-        RR[Results Reporter]
+    subgraph "Data Source"
+        NYC[NYC Taxi Public S3<br/>s3://nyc-tlc/trip data/]
     end
 
-    subgraph "ETL Implementations"
-        SE[Spark ETL Stack]
-        PE[Pythonic ETL Stack]
+    subgraph "Vertical Scaling: The Ant"
+        EC2[Single EC2 Instance<br/>r6i.2xlarge: 8 vCPU, 64GB RAM]
+        POLARS[Polars ETL<br/>Python + s3fs]
     end
 
-    subgraph "Infrastructure Services"
-        PG[(PostgreSQL)]
-        MN[(MinIO S3)]
-        IC[(Iceberg Catalog)]
+    subgraph "Horizontal Scaling: The Cannon"
+        EKS[EKS Cluster]
+        SO[Spark Operator]
+        DRIVER[Spark Driver]
+        EXEC1[Executor 1]
+        EXEC2[Executor 2]
+        EXEC3[Executor N]
     end
 
-    subgraph "Deployment Targets"
-        DC[Docker Compose]
-        K8[Kubernetes]
-        AWS[AWS EKS]
+    subgraph "Results Storage"
+        S3OUT[Benchmark S3 Bucket<br/>Output + Metrics]
     end
 
-    BC --> DG
-    BC --> SE
-    BC --> PE
-    BC --> RM
-    RM --> RR
+    subgraph "Analysis"
+        METRICS[Metrics Collector]
+        REPORT[Cost & Performance Report]
+    end
 
-    SE --> PG
-    SE --> MN
-    SE --> IC
+    NYC --> EC2
+    NYC --> EKS
 
-    PE --> PG
-    PE --> MN
-    PE --> IC
+    EC2 --> POLARS
+    POLARS --> S3OUT
 
-    BC --> DC
-    BC --> K8
-    BC --> AWS
+    EKS --> SO
+    SO --> DRIVER
+    DRIVER --> EXEC1
+    DRIVER --> EXEC2
+    DRIVER --> EXEC3
+    EXEC1 --> S3OUT
+    EXEC2 --> S3OUT
+    EXEC3 --> S3OUT
+
+    S3OUT --> METRICS
+    METRICS --> REPORT
 ```
 
 ### Component Architecture
 
 The system follows a modular architecture with clear separation of concerns:
 
-1. **Benchmark Framework**: Orchestrates test execution, resource monitoring, and results collection
-2. **ETL Implementations**: Two equivalent implementations using different technology stacks
-3. **Infrastructure Services**: Shared data storage and catalog services
-4. **Deployment Adapters**: Environment-specific deployment and monitoring logic
+1. **Data Source**: NYC Taxi public S3 bucket (no data generation needed)
+2. **ETL Implementations**: Identical business logic in Polars (EC2) and Spark (EKS)
+3. **Infrastructure**: EC2 for vertical scaling, EKS for horizontal scaling
+4. **Metrics Collection**: CloudWatch for both EC2 and EKS monitoring
+5. **Cost Analysis**: Automated TCO calculation including operational overhead
+
+### NYC Taxi ETL Logic
+
+Both implementations perform identical operations on the NYC Taxi dataset:
+
+**1. Extract**
+- Read Parquet files from `s3://nyc-tlc/trip data/`
+- Support date range selection (1 month to 10 years)
+- Handle schema evolution across years
+
+**2. Transform**
+- **Filter**: Remove invalid trips (passenger_count > 0, trip_distance > 0, fare_amount > 0)
+- **Calculate**: price_per_mile = total_amount / trip_distance
+- **Enrich**: Add date components (year, month, day, hour)
+- **Clean**: Handle nulls and outliers
+
+**3. Aggregate**
+- Group by PULocationID (pickup location) and date
+- Calculate: avg_fare, avg_distance, avg_price_per_mile, trip_count
+- Sort by trip_count descending
+
+**4. Load**
+- Write results to benchmark S3 bucket as Parquet
+- Include metadata: execution_time, record_count, data_size_gb
 
 ### AWS EKS Architecture
 
@@ -109,10 +145,16 @@ graph TB
 
 **EKS Deployment Strategy**:
 - **Spark Workloads**: Spark Operator manages SparkApplication CRDs with dynamic executor scaling
-- **Polars Workloads**: Kubernetes Jobs with high-memory node allocation
-- **Data Storage**: S3 for input/output with s3a:// protocol
+- **Data Access**: Read from public NYC Taxi S3 bucket, write to benchmark bucket
+- **Authentication**: EKS Pod Identity Association (simpler than IRSA, no ServiceAccount annotations)
 - **Container Images**: ECR for Docker image storage and versioning
 - **Resource Monitoring**: CloudWatch Container Insights for pod-level metrics
+
+**EC2 Deployment Strategy**:
+- **Single Instance**: r6i.2xlarge or r6i.4xlarge (Graviton for cost savings)
+- **Software**: Python 3.12, Polars, s3fs, boto3
+- **Data Access**: Direct S3 read/write using IAM instance profile
+- **Monitoring**: CloudWatch agent for instance metrics
 
 ## Components and Interfaces
 
@@ -155,26 +197,37 @@ class ETLProcessor:
     def get_metrics(self) -> ProcessingMetrics
 ```
 
-### Data Generation Engine
+### NYC Taxi Data Characteristics
 
-**Purpose**: Generate realistic test datasets with configurable characteristics for comprehensive benchmarking.
+**Data Source**: Public S3 bucket maintained by NYC TLC
+- **Location**: `s3://nyc-tlc/trip data/`
+- **Format**: Parquet (optimized for analytics)
+- **Schema**: ~20 columns including timestamps, locations, fares, distances
+- **Size**: ~100MB per file (monthly), ~1.2GB per year
+- **Time Range**: 2009-present (15+ years of data)
 
-**Features**:
-- **Scalable Data Generation**: Support for MB to GB scale datasets
-- **Realistic Data Patterns**: Clickstream data with temporal patterns, IP distributions, user behavior simulation
-- **Configurable Complexity**: Variable join complexity, aggregation requirements, data skew patterns
-- **Format Support**: CSV, Parquet, JSON input formats
-
-**Data Characteristics**:
+**Data Sizes for Benchmarking**:
 ```python
 @dataclass
-class DataCharacteristics:
-    size: DataSize  # small (1MB-100MB), medium (100MB-1GB), large (1GB-10GB)
-    complexity: ComplexityLevel  # simple, moderate, complex
-    skew_factor: float  # 0.0 (uniform) to 1.0 (highly skewed)
-    join_tables: int  # Number of additional tables for join operations
-    temporal_range: timedelta  # Time span for temporal data
+class NYCTaxiDataset:
+    name: str
+    time_range: str
+    file_count: int
+    approx_size_gb: float
+    approx_records: int
+
+# Benchmark datasets
+DATASETS = [
+    NYCTaxiDataset("tiny", "2022-01 (1 month)", 1, 0.1, 3_000_000),
+    NYCTaxiDataset("small", "2022 (1 year)", 12, 1.2, 40_000_000),
+    NYCTaxiDataset("medium", "2020-2022 (3 years)", 36, 4.0, 120_000_000),
+    NYCTaxiDataset("large", "2018-2022 (5 years)", 60, 10.0, 200_000_000),
+    NYCTaxiDataset("xlarge", "2015-2022 (8 years)", 96, 50.0, 500_000_000),
+    NYCTaxiDataset("xxlarge", "2009-2022 (14 years)", 168, 100.0, 1_000_000_000),
+]
 ```
+
+**Key Insight**: No data generation or upload needed - read directly from public bucket!
 
 ### Resource Monitoring System
 
@@ -393,7 +446,25 @@ module "ecr" {
 }
 ```
 
-### Spark Operator Configuration
+### Spark Operator Configuration with Pod Identity
+
+**EKS Pod Identity Association** (Simpler than IRSA):
+```hcl
+# Terraform configuration
+resource "aws_eks_pod_identity_association" "spark" {
+  cluster_name    = module.eks.cluster_name
+  namespace       = "default"
+  service_account = "spark-sa"
+  role_arn        = aws_iam_role.spark_pods.arn
+}
+```
+
+**Benefits over IRSA**:
+- No OIDC provider configuration needed
+- No ServiceAccount annotations required
+- Simpler IAM trust policy
+- Better security isolation
+- Easier to manage at scale
 
 **SparkApplication CRD**:
 ```yaml
@@ -405,16 +476,17 @@ spec:
   type: Python
   mode: cluster
   image: ${ECR_REPO}/spark-etl:${VERSION}
-  mainApplicationFile: s3a://bucket/scripts/spark_etl.py
+  mainApplicationFile: local:///app/src/etl/spark_etl_nyc_taxi.py
 
   sparkConf:
     spark.hadoop.fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+    # Pod Identity handles credentials automatically
     spark.hadoop.fs.s3a.aws.credentials.provider: com.amazonaws.auth.WebIdentityTokenCredentialsProvider
 
   driver:
     cores: 2
     memory: "4g"
-    serviceAccount: spark-sa
+    serviceAccount: spark-sa  # Associated with IAM role via Pod Identity
 
   executor:
     cores: 4
@@ -422,40 +494,66 @@ spec:
     instances: 3
 ```
 
-### Large-Scale Data Generation
+### NYC Taxi Data Access Strategy
 
-**Data Sizes for Cloud Benchmarking**:
-- **Small**: 10M records (~1GB Parquet)
-- **Medium**: 50M records (~5GB Parquet)
-- **Large**: 100M records (~10GB Parquet)
-- **XLarge**: 500M records (~50GB Parquet)
-
-**S3 Data Organization**:
+**Input Data** (No upload needed!):
 ```
-s3://etl-benchmark-data/
-├── input/
+s3://nyc-tlc/trip data/
+├── yellow_tripdata_2022-01.parquet  # ~100MB, 3M records
+├── yellow_tripdata_2022-02.parquet
+├── ...
+└── yellow_tripdata_2009-01.parquet  # Historical data back to 2009
+```
+
+**Output Data** (Benchmark results):
+```
+s3://etl-benchmark-results-${account_id}/
+├── polars/
+│   ├── tiny/
+│   │   ├── results.parquet
+│   │   └── metrics.json
 │   ├── small/
-│   │   ├── bulk/*.parquet
-│   │   └── incremental/*.parquet
 │   ├── medium/
-│   ├── large/
-│   └── xlarge/
-└── output/
-    ├── spark/
-    └── polars/
+│   └── large/
+└── spark/
+    ├── tiny/
+    ├── small/
+    ├── medium/
+    └── large/
 ```
+
+**Cost Savings**:
+- No data generation compute needed
+- No S3 upload costs
+- No S3 storage costs for input data
+- Only pay for output storage (minimal)
 
 ### Cost Tracking and Optimization
 
-**Cost Calculation Components**:
-- **EC2 Compute**: Instance hours × hourly rate
-- **S3 Storage**: GB-month × storage rate
-- **S3 Requests**: GET/PUT requests × request rate
-- **Data Transfer**: GB transferred × transfer rate
-- **EKS Control Plane**: $0.10/hour
+**EC2 Cost Model (Polars)**:
+```python
+ec2_cost = (instance_hourly_rate × execution_hours) + s3_requests_cost
+# Example: r6i.2xlarge = $0.504/hr in us-east-1
+# 10GB processing in 5 minutes = $0.042 + $0.001 S3 = $0.043 total
+```
+
+**EKS Cost Model (Spark)**:
+```python
+eks_cost = (
+    (control_plane_cost × hours) +  # $0.10/hr
+    (node_costs × hours) +           # Multiple nodes
+    (s3_requests_cost)
+)
+# Example: 3 nodes × $0.504/hr × 0.5hr = $0.756 + $0.05 control + $0.002 S3 = $0.808
+```
+
+**TCO Analysis**:
+- **Operational Overhead**: Deployment time, monitoring setup, debugging complexity
+- **Learning Curve**: Time to become proficient with each approach
+- **Maintenance**: Ongoing operational burden
 
 **Optimization Strategies**:
-- Use Spot Instances for worker nodes (60-90% savings)
-- Auto-scale to zero when idle
-- S3 Intelligent Tiering for data lifecycle
-- Graviton instances (r7g) for 20% cost reduction
+- **Graviton Instances**: r7g vs r6i = 20% cost savings
+- **Spot Instances**: 60-90% savings for non-critical workloads
+- **Right-Sizing**: Start small, scale only when needed
+- **No Data Transfer**: Reading from public bucket in same region = free
