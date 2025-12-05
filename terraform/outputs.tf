@@ -59,3 +59,35 @@ output "configure_kubectl" {
   description = "Command to configure kubectl"
   value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}"
 }
+
+# EC2 Outputs
+
+output "ec2_instance_id" {
+  description = "ID of the Polars EC2 instance"
+  value       = module.ec2.instance_id
+}
+
+output "ec2_instance_public_ip" {
+  description = "Public IP of the Polars EC2 instance"
+  value       = module.ec2.instance_public_ip
+}
+
+output "ec2_instance_private_ip" {
+  description = "Private IP of the Polars EC2 instance"
+  value       = module.ec2.instance_private_ip
+}
+
+output "ec2_ssh_command" {
+  description = "SSH command to connect to Polars EC2 instance"
+  value       = module.ec2.ssh_command
+}
+
+output "ec2_cloudwatch_log_group" {
+  description = "CloudWatch log group for Polars EC2 instance"
+  value       = module.ec2.cloudwatch_log_group
+}
+
+output "ec2_iam_role_arn" {
+  description = "IAM role ARN for Polars EC2 instance"
+  value       = module.ec2.iam_role_arn
+}
