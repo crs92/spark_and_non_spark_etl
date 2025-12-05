@@ -216,9 +216,9 @@ resource "aws_instance" "polars_etl" {
   }
 
   tags = {
-    Name        = "${var.name_prefix}-polars-etl"
-    Environment = var.environment
-    Purpose     = "polars-etl-benchmark"
+    Name         = "${var.name_prefix}-polars-etl"
+    Environment  = var.environment
+    Purpose      = "polars-etl-benchmark"
     InstanceType = var.instance_type
   }
 

@@ -1,9 +1,5 @@
-# IAM Module for EKS Service Accounts
-
-# Extract OIDC provider ID from ARN
-locals {
-  oidc_provider_id = replace(var.eks_oidc_issuer, "https://", "")
-}
+# IAM Module for EKS Pod Identity
+# This module uses EKS Pod Identity Association instead of IRSA for simpler configuration
 
 # S3 Access Policy for ETL workloads
 resource "aws_iam_policy" "s3_access" {
@@ -29,6 +25,17 @@ resource "aws_iam_policy" "s3_access" {
       {
         Effect = "Allow"
         Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::nyc-tlc",
+          "arn:aws:s3:::nyc-tlc/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "s3:ListAllMyBuckets",
           "s3:GetBucketLocation"
         ]
@@ -38,25 +45,23 @@ resource "aws_iam_policy" "s3_access" {
   })
 }
 
-# IAM Role for Spark Service Account
+# IAM Role for Spark Service Account (Pod Identity)
 resource "aws_iam_role" "spark_sa" {
   name = "${var.cluster_name}-spark-sa-role"
 
+  # Simplified trust policy for Pod Identity (no OIDC conditions needed)
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow"
         Principal = {
-          Federated = var.eks_oidc_provider
+          Service = "pods.eks.amazonaws.com"
         }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "${local.oidc_provider_id}:sub" = "system:serviceaccount:default:spark-sa"
-            "${local.oidc_provider_id}:aud" = "sts.amazonaws.com"
-          }
-        }
+        Action = [
+          "sts:AssumeRole",
+          "sts:TagSession"
+        ]
       }
     ]
   })
@@ -72,25 +77,23 @@ resource "aws_iam_role_policy_attachment" "spark_sa_s3" {
   policy_arn = aws_iam_policy.s3_access.arn
 }
 
-# IAM Role for Polars Service Account
+# IAM Role for Polars Service Account (Pod Identity)
 resource "aws_iam_role" "polars_sa" {
   name = "${var.cluster_name}-polars-sa-role"
 
+  # Simplified trust policy for Pod Identity (no OIDC conditions needed)
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow"
         Principal = {
-          Federated = var.eks_oidc_provider
+          Service = "pods.eks.amazonaws.com"
         }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "${local.oidc_provider_id}:sub" = "system:serviceaccount:default:polars-sa"
-            "${local.oidc_provider_id}:aud" = "sts.amazonaws.com"
-          }
-        }
+        Action = [
+          "sts:AssumeRole",
+          "sts:TagSession"
+        ]
       }
     ]
   })
@@ -136,4 +139,30 @@ resource "aws_iam_role_policy_attachment" "spark_sa_logs" {
 resource "aws_iam_role_policy_attachment" "polars_sa_logs" {
   role       = aws_iam_role.polars_sa.name
   policy_arn = aws_iam_policy.cloudwatch_logs.arn
+}
+
+# EKS Pod Identity Association for Spark
+resource "aws_eks_pod_identity_association" "spark" {
+  cluster_name    = var.cluster_name
+  namespace       = "default"
+  service_account = "spark-sa"
+  role_arn        = aws_iam_role.spark_sa.arn
+
+  tags = {
+    Name        = "${var.cluster_name}-spark-pod-identity"
+    Environment = var.environment
+  }
+}
+
+# EKS Pod Identity Association for Polars
+resource "aws_eks_pod_identity_association" "polars" {
+  cluster_name    = var.cluster_name
+  namespace       = "default"
+  service_account = "polars-sa"
+  role_arn        = aws_iam_role.polars_sa.arn
+
+  tags = {
+    Name        = "${var.cluster_name}-polars-pod-identity"
+    Environment = var.environment
+  }
 }

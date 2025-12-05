@@ -23,16 +23,6 @@ output "cluster_certificate_authority_data" {
   value       = aws_eks_cluster.main.certificate_authority[0].data
 }
 
-output "oidc_provider_arn" {
-  description = "ARN of the OIDC provider"
-  value       = aws_iam_openid_connect_provider.cluster.arn
-}
-
-output "oidc_issuer" {
-  description = "OIDC issuer URL"
-  value       = aws_eks_cluster.main.identity[0].oidc[0].issuer
-}
-
 output "node_role_arn" {
   description = "ARN of the node IAM role"
   value       = aws_iam_role.node.arn

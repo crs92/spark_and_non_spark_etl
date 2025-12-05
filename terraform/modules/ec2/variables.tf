@@ -35,12 +35,12 @@ variable "instance_type" {
 
   validation {
     condition = contains([
-      "r6i.2xlarge",  # 8 vCPU, 64GB RAM, x86
-      "r6i.4xlarge",  # 16 vCPU, 128GB RAM, x86
-      "r6i.8xlarge",  # 32 vCPU, 256GB RAM, x86
-      "r7g.2xlarge",  # 8 vCPU, 64GB RAM, Graviton3
-      "r7g.4xlarge",  # 16 vCPU, 128GB RAM, Graviton3
-      "r7g.8xlarge"   # 32 vCPU, 256GB RAM, Graviton3
+      "r6i.2xlarge", # 8 vCPU, 64GB RAM, x86
+      "r6i.4xlarge", # 16 vCPU, 128GB RAM, x86
+      "r6i.8xlarge", # 32 vCPU, 256GB RAM, x86
+      "r7g.2xlarge", # 8 vCPU, 64GB RAM, Graviton3
+      "r7g.4xlarge", # 16 vCPU, 128GB RAM, Graviton3
+      "r7g.8xlarge"  # 32 vCPU, 256GB RAM, Graviton3
     ], var.instance_type)
     error_message = "Instance type must be one of: r6i.2xlarge, r6i.4xlarge, r6i.8xlarge, r7g.2xlarge, r7g.4xlarge, r7g.8xlarge"
   }

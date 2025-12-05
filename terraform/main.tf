@@ -55,7 +55,7 @@ module "eks" {
   environment     = var.environment
 
   # Node group configurations
-  node_arch = var.node_arch
+  node_arch             = var.node_arch
   spark_workers_config  = var.spark_workers_config
   polars_workers_config = var.polars_workers_config
 }
@@ -76,34 +76,35 @@ module "ecr" {
   environment  = var.environment
 }
 
-# IAM Module
+# IAM Module (using Pod Identity instead of IRSA)
 module "iam" {
   source = "./modules/iam"
 
-  cluster_name       = var.cluster_name
-  s3_bucket_arn      = module.s3.bucket_arn
-  eks_oidc_provider  = module.eks.oidc_provider_arn
-  eks_oidc_issuer    = module.eks.oidc_issuer
-  environment        = var.environment
+  cluster_name  = var.cluster_name
+  s3_bucket_arn = module.s3.bucket_arn
+  environment   = var.environment
+
+  # Pod Identity requires the EKS cluster to exist first
+  depends_on = [module.eks]
 }
 
 # EC2 Module for Polars (Vertical Scaling)
 module "ec2" {
   source = "./modules/ec2"
 
-  name_prefix      = var.cluster_name
-  environment      = var.environment
-  aws_region       = var.aws_region
-  vpc_id           = module.vpc.vpc_id
-  subnet_id        = module.vpc.public_subnet_ids[0]
-  instance_type    = var.ec2_instance_type
-  architecture     = var.ec2_architecture
-  key_name         = var.ec2_key_name
-  ssh_cidr_blocks  = var.ec2_ssh_cidr_blocks
-  s3_bucket_arn    = module.s3.bucket_arn
-  s3_bucket_name   = module.s3.bucket_name
-  create_instance  = var.ec2_create_instance
-  allocate_eip     = var.ec2_allocate_eip
-  git_repo_url     = var.git_repo_url
-  git_branch       = var.git_branch
+  name_prefix     = var.cluster_name
+  environment     = var.environment
+  aws_region      = var.aws_region
+  vpc_id          = module.vpc.vpc_id
+  subnet_id       = module.vpc.public_subnet_ids[0]
+  instance_type   = var.ec2_instance_type
+  architecture    = var.ec2_architecture
+  key_name        = var.ec2_key_name
+  ssh_cidr_blocks = var.ec2_ssh_cidr_blocks
+  s3_bucket_arn   = module.s3.bucket_arn
+  s3_bucket_name  = module.s3.bucket_name
+  create_instance = var.ec2_create_instance
+  allocate_eip    = var.ec2_allocate_eip
+  git_repo_url    = var.git_repo_url
+  git_branch      = var.git_branch
 }

@@ -75,20 +75,8 @@ resource "aws_eks_cluster" "main" {
   ]
 }
 
-# OIDC Provider for IRSA (IAM Roles for Service Accounts)
-data "tls_certificate" "cluster" {
-  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
-}
-
-resource "aws_iam_openid_connect_provider" "cluster" {
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.cluster.certificates[0].sha1_fingerprint]
-  url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
-
-  tags = {
-    Name = "${var.cluster_name}-oidc-provider"
-  }
-}
+# Note: OIDC Provider removed - using EKS Pod Identity instead of IRSA
+# Pod Identity provides simpler configuration without OIDC provider setup
 
 # Node IAM Role
 resource "aws_iam_role" "node" {
@@ -129,7 +117,7 @@ resource "aws_eks_node_group" "spark_workers" {
   subnet_ids      = var.subnet_ids
 
   instance_types = [var.spark_workers_config.instance_type]
-  ami_type = local.selected_ami_type
+  ami_type       = local.selected_ami_type
 
   scaling_config {
     desired_size = var.spark_workers_config.desired_size
@@ -165,7 +153,7 @@ resource "aws_eks_node_group" "polars_workers" {
   subnet_ids      = var.subnet_ids
 
   instance_types = [var.polars_workers_config.instance_type]
-  ami_type = local.selected_ami_type
+  ami_type       = local.selected_ami_type
 
   scaling_config {
     desired_size = var.polars_workers_config.desired_size

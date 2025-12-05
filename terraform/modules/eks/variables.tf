@@ -46,5 +46,5 @@ variable "polars_workers_config" {
 variable "node_arch" {
   description = "CPU architecture for the node groups: x86 or arm"
   type        = string
-  default     = "arm"  # or "x86"
+  default     = "arm" # or "x86"
 }
