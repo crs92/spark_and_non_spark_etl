@@ -55,9 +55,9 @@ def main():
     parser.add_argument(
         "--region",
         type=str,
-        default="us-east-1",
+        default="eu-central-1",
         choices=["us-east-1", "eu-central-1", "us-west-2", "ap-southeast-1"],
-        help="AWS region for pricing (default: us-east-1)",
+        help="AWS region for pricing (default: eu-central-1)",
     )
 
     args = parser.parse_args()

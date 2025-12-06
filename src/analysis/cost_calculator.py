@@ -98,11 +98,11 @@ class InstanceType(Enum):
         self.memory_gb = memory_gb
         self.architecture = architecture
 
-    def get_hourly_rate(self, region: str = "us-east-1") -> float:
+    def get_hourly_rate(self, region: str = "eu-central-1") -> float:
         """Get hourly rate for this instance type in the specified region.
 
         Args:
-            region: AWS region (default: us-east-1)
+            region: AWS region (default: eu-central-1)
 
         Returns:
             Hourly rate in USD
@@ -132,7 +132,7 @@ class EC2CostModel:
     instance_type: InstanceType
     execution_time_seconds: float
     data_size_gb: float
-    region: str = "us-east-1"
+    region: str = "eu-central-1"
     s3_read_requests: int = 0
     s3_write_requests: int = 0
     s3_storage_gb_month: float = 0.0
@@ -215,7 +215,7 @@ class EKSCostModel:
     num_nodes: int
     execution_time_seconds: float
     data_size_gb: float
-    region: str = "us-east-1"
+    region: str = "eu-central-1"
     num_executors: int = 0
     s3_read_requests: int = 0
     s3_write_requests: int = 0
@@ -316,7 +316,7 @@ class CostCalculator:
         instance_type: InstanceType,
         execution_time_seconds: float,
         data_size_gb: float,
-        region: str = "us-east-1",
+        region: str = "eu-central-1",
         s3_read_requests: int = 0,
         s3_write_requests: int = 0,
         s3_storage_gb_month: float = 0.0,
@@ -327,7 +327,7 @@ class CostCalculator:
             instance_type: EC2 instance type
             execution_time_seconds: Execution time in seconds
             data_size_gb: Data size processed in GB
-            region: AWS region (default: us-east-1)
+            region: AWS region (default: eu-central-1)
             s3_read_requests: Number of S3 GET requests
             s3_write_requests: Number of S3 PUT requests
             s3_storage_gb_month: S3 storage in GB-months
@@ -351,7 +351,7 @@ class CostCalculator:
         num_nodes: int,
         execution_time_seconds: float,
         data_size_gb: float,
-        region: str = "us-east-1",
+        region: str = "eu-central-1",
         num_executors: int = 0,
         s3_read_requests: int = 0,
         s3_write_requests: int = 0,
@@ -364,7 +364,7 @@ class CostCalculator:
             num_nodes: Number of nodes in cluster
             execution_time_seconds: Execution time in seconds
             data_size_gb: Data size processed in GB
-            region: AWS region (default: us-east-1)
+            region: AWS region (default: eu-central-1)
             num_executors: Number of Spark executors
             s3_read_requests: Number of S3 GET requests
             s3_write_requests: Number of S3 PUT requests
@@ -426,14 +426,14 @@ class CostCalculator:
     def calculate_graviton_savings(
         x86_instance: InstanceType,
         arm_instance: InstanceType,
-        region: str = "us-east-1",
+        region: str = "eu-central-1",
     ) -> dict[str, Any]:
         """Calculate cost savings from using Graviton (ARM) instances.
 
         Args:
             x86_instance: x86 instance type
             arm_instance: ARM (Graviton) instance type
-            region: AWS region (default: us-east-1)
+            region: AWS region (default: eu-central-1)
 
         Returns:
             Dictionary with Graviton savings analysis

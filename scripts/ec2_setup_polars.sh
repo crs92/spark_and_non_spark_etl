@@ -12,7 +12,7 @@ set -e
 
 # Configuration (can be overridden by arguments)
 S3_BUCKET_NAME="${1:-etl-benchmark-data}"
-AWS_REGION="${2:-us-east-1}"
+AWS_REGION="${2:-eu-central-1}"
 GIT_REPO_URL="${3:-https://github.com/yourusername/etl-benchmark.git}"
 GIT_BRANCH="${4:-main}"
 CLOUDWATCH_LOG_GROUP="/aws/ec2/polars-etl"

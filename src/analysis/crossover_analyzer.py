@@ -86,7 +86,7 @@ class CrossoverAnalyzer:
         ec2_instance_type: InstanceType = InstanceType.R6I_2XLARGE,
         eks_node_instance_type: InstanceType = InstanceType.R6I_2XLARGE,
         eks_num_nodes: int = 3,
-        region: str = "us-east-1",
+        region: str = "eu-central-1",
     ):
         """Initialize crossover analyzer.
 
@@ -94,7 +94,7 @@ class CrossoverAnalyzer:
             ec2_instance_type: EC2 instance type for Polars
             eks_node_instance_type: EKS node instance type for Spark
             eks_num_nodes: Number of EKS nodes
-            region: AWS region for pricing (default: us-east-1)
+            region: AWS region for pricing (default: eu-central-1)
         """
         self.ec2_instance_type = ec2_instance_type
         self.eks_node_instance_type = eks_node_instance_type

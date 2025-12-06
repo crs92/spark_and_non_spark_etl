@@ -59,7 +59,7 @@ class CloudWatchMetricsCollector:
     """Collects metrics from CloudWatch for benchmark analysis."""
 
     def __init__(
-        self, aws_region: str = "us-east-1", results_dir: str = "benchmark_results"
+        self, aws_region: str = "eu-central-1", results_dir: str = "benchmark_results"
     ):
         """Initialize the metrics collector.
 
@@ -489,8 +489,8 @@ def main():
     parser.add_argument(
         "--region",
         type=str,
-        default="us-east-1",
-        help="AWS region (default: us-east-1)",
+        default="eu-central-1",
+        help="AWS region (default: eu-central-1)",
     )
     parser.add_argument(
         "--results-dir",

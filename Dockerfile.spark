@@ -1,5 +1,6 @@
 # Spark-based ETL Docker Image for NYC Taxi Benchmark
-FROM python:3.12-slim
+# Force AMD64 architecture for compatibility with AWS EC2/EKS
+FROM --platform=linux/amd64 python:3.12-slim
 
 # Install system dependencies and Java
 RUN apt-get update && apt-get install -y \

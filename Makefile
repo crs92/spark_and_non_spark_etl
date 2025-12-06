@@ -26,7 +26,15 @@ TEST_DIR := tests
         docker-build docker-build-spark docker-build-pythonic docker-up docker-down \
         docker-run-spark docker-run-pythonic docker-test-quick docker-benchmark \
         docker-logs docker-shell docker-test docker-clean \
-        k8s-setup k8s-benchmark k8s-clean
+        ecr-login ecr-push ecr-push-spark ecr-push-polars ecr-push-all \
+        k8s-setup k8s-benchmark k8s-clean \
+        tf-init tf-plan tf-apply tf-destroy tf-output tf-validate \
+        benchmark-full-run benchmark-nyc-taxi benchmark-verify benchmark-metrics \
+        cost-analysis cost-analysis-region cost-test \
+        report-generate report-presentation report-all \
+        clean-benchmark clean-reports clean-s3 clean-all \
+        quickstart-ec2 quickstart-eks quickstart-full \
+        workflow-status workflow-costs
 
 # Self-documenting help command. It parses this file to show available commands.
 help: ## ✨ Show this help message
@@ -108,19 +116,23 @@ benchmark-docker: ## 🐳 Run Docker/Podman benchmark (use SIZE=small|medium|lar
 	@DATA_SIZE=${SIZE} bash scripts/benchmark_docker.sh
 	@echo "Docker benchmark finished!"
 
+benchmark-comprehensive: ## 📊 Run comprehensive benchmark (small, medium, large with 3 runs each)
+	@echo "--- Running comprehensive benchmark ---"
+	@python3 scripts/run_comprehensive_benchmark.py
+
 # Docker commands
-docker-build: ## 🐳 Build both Docker images
-	@echo "--- Building both Docker images ---"
-	@$(DOCKER_CMD) build -f Dockerfile.spark -t spark-etl .
-	@$(DOCKER_CMD) build -f Dockerfile.pythonic -t pythonic-etl .
+docker-build: ## 🐳 Build both Docker images (AMD64)
+	@echo "--- Building both Docker images for AMD64 ---"
+	@$(DOCKER_CMD) build --platform linux/amd64 -f Dockerfile.spark -t spark-etl .
+	@$(DOCKER_CMD) build --platform linux/amd64 -f Dockerfile.pythonic -t pythonic-etl .
 
-docker-build-spark: ## ⚡ Build Spark ETL image only
-	@echo "--- Building Spark ETL image ---"
-	@$(DOCKER_CMD) build -f Dockerfile.spark -t spark-etl .
+docker-build-spark: ## ⚡ Build Spark ETL image only (AMD64)
+	@echo "--- Building Spark ETL image for AMD64 ---"
+	@$(DOCKER_CMD) build --platform linux/amd64 -f Dockerfile.spark -t spark-etl .
 
-docker-build-pythonic: ## 🐍 Build Pythonic ETL image only
-	@echo "--- Building Pythonic ETL image ---"
-	@$(DOCKER_CMD) build -f Dockerfile.pythonic -t pythonic-etl .
+docker-build-pythonic: ## 🐍 Build Pythonic ETL image only (AMD64)
+	@echo "--- Building Pythonic ETL image for AMD64 ---"
+	@$(DOCKER_CMD) build --platform linux/amd64 -f Dockerfile.pythonic -t pythonic-etl .
 
 docker-up: ## 🚀 Start infrastructure services
 	@echo "--- Starting infrastructure services ---"
@@ -172,6 +184,29 @@ docker-clean: ## 🧽 Remove Docker containers, networks, and volumes
 	@$(DOCKER_CMD) compose down -v --remove-orphans
 	@$(DOCKER_CMD) system prune -f
 
+# ECR (Elastic Container Registry) commands
+ecr-login: ## 🔐 Authenticate with AWS ECR
+	@echo "--- Authenticating with ECR ---"
+	@AWS_REGION=$${AWS_REGION:-eu-central-1}; \
+	AWS_ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text); \
+	aws ecr get-login-password --region $$AWS_REGION | \
+	$(DOCKER_CMD) login --username AWS --password-stdin $$AWS_ACCOUNT_ID.dkr.ecr.$$AWS_REGION.amazonaws.com
+	@echo "✅ Successfully authenticated with ECR"
+
+ecr-push-spark: ## 🚀 Build and push Spark image to ECR (usage: make ecr-push-spark VERSION=v1.0.0)
+	@echo "--- Building and pushing Spark image to ECR ---"
+	@./scripts/push_to_ecr.sh spark $(or $(VERSION),latest)
+
+ecr-push-polars: ## 🚀 Build and push Polars image to ECR (usage: make ecr-push-polars VERSION=v1.0.0)
+	@echo "--- Building and pushing Polars image to ECR ---"
+	@./scripts/push_to_ecr.sh polars $(or $(VERSION),latest)
+
+ecr-push-all: ## 🚀 Build and push both images to ECR (usage: make ecr-push-all VERSION=v1.0.0)
+	@echo "--- Building and pushing all images to ECR ---"
+	@./scripts/push_to_ecr.sh all $(or $(VERSION),latest)
+
+ecr-push: ecr-push-all ## 🚀 Alias for ecr-push-all
+
 # Kubernetes commands
 k8s-setup: ## ☸️ Setup Kubernetes cluster for distributed testing
 	@echo "--- Setting up Kubernetes for Spark distributed testing ---"
@@ -191,3 +226,204 @@ k8s-clean: ## 🧽 Clean up Kubernetes resources
 	@kubectl delete -f k8s/infrastructure/ --ignore-not-found=true
 	@kubectl delete -f k8s/spark-rbac.yaml --ignore-not-found=true
 	@kubectl delete jobs --all --ignore-not-found=true
+
+# Spark Operator commands (EKS)
+spark-operator-install: ## 🎯 Install Spark Operator on EKS
+	@echo "--- Installing Spark Operator ---"
+	@./k8s/spark-operator/install.sh
+
+spark-operator-configure: ## 🔧 Configure IRSA for Spark ServiceAccount
+	@echo "--- Configuring IRSA for Spark ---"
+	@./k8s/spark-operator/configure-irsa.sh
+
+spark-operator-verify: ## ✅ Verify Spark Operator installation
+	@echo "--- Verifying Spark Operator ---"
+	@./k8s/spark-operator/verify.sh
+
+spark-deploy: ## 🚀 Deploy Spark ETL benchmark (usage: make spark-deploy MODE=bulk SIZE=medium)
+	@echo "--- Deploying Spark ETL Benchmark ---"
+	@./k8s/spark-operator/deploy-benchmark.sh $(or $(MODE),bulk) $(or $(SIZE),medium) $(or $(REGION),eu-central-1)
+
+spark-monitor: ## 👀 Monitor Spark applications (usage: make spark-monitor APP=<name>)
+	@./k8s/spark-operator/monitor.sh $(APP)
+
+spark-cleanup: ## 🧹 Clean up Spark applications (usage: make spark-cleanup MODE=all|completed|failed)
+	@./k8s/spark-operator/cleanup.sh $(or $(MODE),all)
+
+# Terraform commands
+tf-init: ## 🏗️ Initialize Terraform working directory
+	@echo "--- Initializing Terraform ---"
+	@cd terraform && terraform init
+
+tf-plan: ## 📋 Generate and show Terraform execution plan
+	@echo "--- Planning Terraform changes ---"
+	@cd terraform && terraform plan
+
+tf-apply: ## 🚀 Apply Terraform configuration to create/update infrastructure
+	@echo "--- Applying Terraform configuration ---"
+	@cd terraform && terraform apply
+
+tf-destroy: ## 💥 Destroy all Terraform-managed infrastructure
+	@echo "--- Destroying Terraform infrastructure ---"
+	@echo "⚠️  WARNING: This will destroy all AWS resources!"
+	@cd terraform && terraform destroy
+
+tf-output: ## 📤 Show Terraform outputs
+	@echo "--- Terraform Outputs ---"
+	@cd terraform && terraform output
+
+tf-validate: ## ✅ Validate Terraform configuration files
+	@echo "--- Validating Terraform configuration ---"
+	@cd terraform && terraform validate
+
+# EC2 Polars commands
+ec2-deploy: ## 🖥️ Deploy EC2 instance for Polars (usage: make ec2-deploy TYPE=r6i.2xlarge ARCH=x86_64)
+	@echo "--- Deploying EC2 instance for Polars ---"
+	@./scripts/deploy_ec2_polars.sh $(or $(TYPE),r6i.2xlarge) $(or $(ARCH),x86_64)
+
+ec2-deploy-graviton: ## 🦾 Deploy Graviton EC2 instance for Polars (20% cost savings)
+	@echo "--- Deploying Graviton EC2 instance ---"
+	@./scripts/deploy_ec2_polars.sh r7g.2xlarge arm64
+
+ec2-benchmark: ## 📊 Run benchmark on EC2 (usage: make ec2-benchmark SIZE=small)
+	@echo "--- Running EC2 Polars benchmark ---"
+	@./scripts/run_ec2_benchmark.sh $(or $(SIZE),small)
+
+ec2-benchmark-all: ## 🏆 Run all EC2 benchmarks (tiny through large)
+	@echo "--- Running all EC2 benchmarks ---"
+	@./scripts/run_ec2_benchmark.sh tiny
+	@./scripts/run_ec2_benchmark.sh small
+	@./scripts/run_ec2_benchmark.sh medium
+	@./scripts/run_ec2_benchmark.sh large
+
+ec2-ssh: ## 🔐 SSH to EC2 instance (auto-detected)
+	@echo "--- Connecting to EC2 instance ---"
+	@cd terraform && eval $$(terraform output -raw ec2_ssh_command)
+
+ec2-logs: ## 📋 View EC2 CloudWatch logs
+	@echo "--- Viewing EC2 CloudWatch logs ---"
+	@LOG_GROUP=$$(cd terraform && terraform output -raw ec2_cloudwatch_log_group 2>/dev/null || echo "/aws/ec2/etl-benchmark-polars-etl"); \
+	INSTANCE_ID=$$(cd terraform && terraform output -raw ec2_instance_id 2>/dev/null); \
+	aws logs tail "$$LOG_GROUP" --log-stream-names "$$INSTANCE_ID/etl" --follow
+
+ec2-status: ## 📊 Show EC2 instance status
+	@echo "--- EC2 Instance Status ---"
+	@cd terraform && terraform output | grep ec2
+
+ec2-destroy: ## 💥 Destroy EC2 instance (keeps other infrastructure)
+	@echo "--- Destroying EC2 instance ---"
+	@echo "⚠️  WARNING: This will destroy the EC2 instance!"
+	@cd terraform && terraform apply -var="ec2_create_instance=false"
+
+# Full Benchmark Orchestration
+benchmark-full-run: ## 🏆 Run complete benchmark across all sizes (EC2 + EKS)
+	@echo "--- Running full benchmark orchestration ---"
+	@$(PYTHON) scripts/run_full_benchmark.py
+
+benchmark-nyc-taxi: ## 🚕 Run NYC Taxi ETL benchmark (usage: make benchmark-nyc-taxi SIZE=small STACK=polars)
+	@echo "--- Running NYC Taxi ETL benchmark ---"
+	@$(PYTHON) scripts/run_full_benchmark.py --size $(or $(SIZE),small) --stack $(or $(STACK),both)
+
+benchmark-verify: ## ✅ Verify benchmark results match between Polars and Spark
+	@echo "--- Verifying benchmark results ---"
+	@$(PYTHON) scripts/validate_results.py
+
+benchmark-metrics: ## 📊 Collect CloudWatch metrics from benchmark runs
+	@echo "--- Collecting CloudWatch metrics ---"
+	@$(PYTHON) scripts/collect_cloudwatch_metrics.py
+
+# Cost Analysis
+cost-analysis: ## 💰 Run cost analysis on benchmark results
+	@echo "--- Running cost analysis ---"
+	@$(PYTHON) scripts/analyze_benchmark_costs.py
+
+cost-analysis-region: ## 🌍 Show regional pricing comparison (usage: make cost-analysis-region REGION=eu-central-1)
+	@echo "--- Showing regional pricing ---"
+	@$(PYTHON) scripts/show_regional_pricing.py $(or $(REGION),eu-central-1)
+
+cost-test: ## 🧪 Test cost calculation logic
+	@echo "--- Testing cost analysis ---"
+	@$(PYTHON) scripts/test_cost_analysis.py
+
+# Report Generation
+report-generate: ## 📄 Generate comprehensive benchmark report
+	@echo "--- Generating benchmark report ---"
+	@$(PYTHON) scripts/generate_benchmark_report.py
+
+report-presentation: ## 📊 Generate PowerPoint presentation from results
+	@echo "--- Generating presentation ---"
+	@$(PYTHON) scripts/generate_presentation.py
+
+report-all: report-generate report-presentation ## 📑 Generate all reports and presentations
+	@echo "✅ All reports generated"
+
+# Comprehensive Cleanup
+clean-benchmark: ## 🧹 Clean benchmark results and artifacts
+	@echo "--- Cleaning benchmark results ---"
+	@rm -rf benchmark_results/*.json
+	@rm -rf benchmark_results/*.log
+	@rm -rf data/output/*
+	@echo "✅ Benchmark results cleaned"
+
+clean-reports: ## 🧹 Clean generated reports and presentations
+	@echo "--- Cleaning reports ---"
+	@rm -rf artifacts/*.pptx
+	@rm -rf reports/*.md
+	@echo "✅ Reports cleaned"
+
+clean-s3: ## 🧹 Clean S3 benchmark results (requires AWS credentials)
+	@echo "--- Cleaning S3 benchmark results ---"
+	@BUCKET_NAME=$$(cd terraform && terraform output -raw s3_bucket_name 2>/dev/null || echo "etl-benchmark-results"); \
+	echo "Cleaning bucket: $$BUCKET_NAME"; \
+	aws s3 rm s3://$$BUCKET_NAME/polars/ --recursive || true; \
+	aws s3 rm s3://$$BUCKET_NAME/spark/ --recursive || true; \
+	echo "✅ S3 results cleaned"
+
+clean-all: clean clean-benchmark clean-reports docker-clean ## 🧽 Clean everything (code, benchmarks, reports, Docker)
+	@echo "✅ Complete cleanup finished"
+
+# Quick Start Workflows
+quickstart-ec2: ## 🚀 Quick start: Deploy EC2 and run small benchmark
+	@echo "--- Quick Start: EC2 Polars Benchmark ---"
+	@$(MAKE) ec2-deploy
+	@sleep 60
+	@$(MAKE) ec2-benchmark SIZE=small
+	@$(MAKE) cost-analysis
+	@echo "✅ Quick start complete! Check benchmark_results/ for results"
+
+quickstart-eks: ## 🚀 Quick start: Deploy Spark on EKS and run small benchmark
+	@echo "--- Quick Start: EKS Spark Benchmark ---"
+	@$(MAKE) spark-operator-install
+	@$(MAKE) spark-operator-configure
+	@$(MAKE) spark-deploy SIZE=small
+	@$(MAKE) cost-analysis
+	@echo "✅ Quick start complete! Check benchmark_results/ for results"
+
+quickstart-full: ## 🚀 Quick start: Run complete comparison (EC2 + EKS)
+	@echo "--- Quick Start: Full Comparison ---"
+	@echo "This will deploy both EC2 and EKS, run benchmarks, and generate reports"
+	@$(MAKE) quickstart-ec2
+	@$(MAKE) quickstart-eks
+	@$(MAKE) benchmark-verify
+	@$(MAKE) report-all
+	@echo "✅ Full comparison complete! Check artifacts/ for reports"
+
+# Workflow Helpers
+workflow-status: ## 📊 Show status of all infrastructure components
+	@echo "--- Infrastructure Status ---"
+	@echo ""
+	@echo "Terraform:"
+	@cd terraform && terraform output 2>/dev/null || echo "  Not initialized"
+	@echo ""
+	@echo "EC2 Instances:"
+	@aws ec2 describe-instances --filters "Name=tag:Project,Values=etl-benchmark" --query 'Reservations[*].Instances[*].[InstanceId,State.Name,InstanceType]' --output table 2>/dev/null || echo "  No instances found"
+	@echo ""
+	@echo "EKS Cluster:"
+	@kubectl cluster-info 2>/dev/null || echo "  Not connected"
+	@echo ""
+	@echo "Spark Applications:"
+	@kubectl get sparkapplications 2>/dev/null || echo "  No Spark applications found"
+
+workflow-costs: ## 💰 Show estimated costs for current infrastructure
+	@echo "--- Current Infrastructure Costs ---"
+	@$(PYTHON) scripts/analyze_benchmark_costs.py --current-only

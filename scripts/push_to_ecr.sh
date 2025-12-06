@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 # Default values
 IMAGE_TYPE="${1:-all}"
 VERSION="${2:-latest}"
-AWS_REGION="${AWS_REGION:-us-east-1}"
+AWS_REGION="${AWS_REGION:-eu-central-1}"
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}ECR Image Build and Push Script${NC}"
@@ -77,9 +77,9 @@ build_and_push() {
     echo -e "${YELLOW}Building and pushing: $image_name${NC}"
     echo -e "${YELLOW}========================================${NC}"
 
-    # Build the image
-    echo "Building $image_name..."
-    $DOCKER_CMD build -f "$dockerfile" -t "$image_name:$VERSION" .
+    # Build the image for AMD64 architecture
+    echo "Building $image_name for AMD64 architecture..."
+    $DOCKER_CMD build --platform linux/amd64 -f "$dockerfile" -t "$image_name:$VERSION" .
 
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: Failed to build $image_name${NC}"

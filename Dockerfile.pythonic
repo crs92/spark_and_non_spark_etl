@@ -1,5 +1,6 @@
 # Pythonic ETL Docker Image for NYC Taxi Benchmark (Polars + DuckDB + PyIceberg)
-FROM python:3.12-slim
+# Force AMD64 architecture for compatibility with AWS EC2/EKS
+FROM --platform=linux/amd64 python:3.12-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \

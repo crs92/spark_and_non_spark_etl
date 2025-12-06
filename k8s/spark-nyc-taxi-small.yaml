@@ -96,7 +96,7 @@ spec:
 
     env:
       - name: AWS_REGION
-        value: "us-east-1"
+        value: "eu-central-1"
       - name: PYTHONPATH
         value: "/app"
       - name: BENCHMARK_NAME
@@ -120,7 +120,7 @@ spec:
 
     env:
       - name: AWS_REGION
-        value: "us-east-1"
+        value: "eu-central-1"
       - name: PYTHONPATH
         value: "/app"
 

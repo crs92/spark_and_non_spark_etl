@@ -5,7 +5,7 @@ set -e
 
 CLUSTER_NAME="${CLUSTER_NAME:-etl-benchmark-cluster}"
 NAMESPACE="${NAMESPACE:-default}"
-REGION="${AWS_REGION:-us-east-1}"
+REGION="${AWS_REGION:-eu-central-1}"
 
 echo "=========================================="
 echo "EKS Pod Identity Verification Script"
