@@ -1,54 +1,19 @@
-# Spark-based ETL Docker Image for NYC Taxi Benchmark
-# Force AMD64 architecture for compatibility with AWS EC2/EKS
-FROM --platform=linux/amd64 python:3.12-slim
+# Production Spark ETL Dockerfile for EKS with Pod Identity
+# Extends official Spark 3.5.7 image with AWS S3 support
+FROM apache/spark:3.5.7-python3
 
-# Install system dependencies and Java
-RUN apt-get update && apt-get install -y \
-    openjdk-21-jre-headless \
-    curl \
-    procps \
-    && rm -rf /var/lib/apt/lists/*
+USER root
 
-# Set Java home (Java 21 works with Spark 3.5+)
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+# Install AWS JARs compatible with EKS Pod Identity
+# - Hadoop AWS 3.3.4: Matches Spark 3.5.x built-in Hadoop version
+# - AWS SDK 1.12.770: Fully supports EKS Pod Identity (no IP restrictions)
+RUN curl -fsSL https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
+         -o /opt/spark/jars/hadoop-aws-3.3.4.jar && \
+    curl -fsSL https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.770/aws-java-sdk-bundle-1.12.770.jar \
+         -o /opt/spark/jars/aws-java-sdk-bundle-1.12.770.jar
 
-# Install uv for package management
-RUN pip install --no-cache-dir uv
+# Copy ETL application
+COPY --chown=spark:spark src/etl/spark_etl_nyc_taxi_k8s.py /opt/spark/work-dir/
 
-# Set working directory
-WORKDIR /app
-
-# Copy dependency files first for better layer caching
-COPY pyproject.toml ./
-
-# Install Python dependencies including S3 access libraries
-RUN uv pip install --system \
-    pyspark \
-    pyarrow \
-    pyiceberg \
-    boto3 \
-    s3fs
-
-# Download AWS Hadoop libraries for S3 access (s3a:// protocol)
-# These JARs are required for Spark to access S3
-RUN mkdir -p /app/jars && \
-    curl -L https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
-         -o /app/jars/hadoop-aws-3.3.4.jar && \
-    curl -L https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
-         -o /app/jars/aws-java-sdk-bundle-1.12.262.jar
-
-# Copy source code (includes NYC Taxi ETL scripts)
-COPY src/ ./src/
-
-# Set environment variables
-ENV PYTHONPATH="/app"
-ENV PYSPARK_PYTHON="python"
-ENV SPARK_HOME="/usr/local/lib/python3.12/site-packages/pyspark"
-# Add AWS Hadoop JARs to Spark classpath
-ENV SPARK_EXTRA_CLASSPATH="/app/jars/*"
-
-# Expose Spark UI ports
-EXPOSE 4040 4041
-
-# Default command runs the NYC Taxi Spark ETL
-CMD ["python", "-m", "src.etl.spark_etl_nyc_taxi", "--size", "tiny"]
+USER 185
+WORKDIR /opt/spark/work-dir
