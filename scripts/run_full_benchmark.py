@@ -150,8 +150,11 @@ class BenchmarkOrchestrator:
             try:
                 response = self.ec2_client.describe_instances(
                     Filters=[
-                        {"Name": "tag:Purpose", "Values": ["polars-etl-benchmark"]},
-                        {"Name": "instance-state-name", "Values": ["running"]},
+                        {"Name": "tag:Project", "Values": ["etl-benchmark"]},
+                        {
+                            "Name": "instance-state-name",
+                            "Values": ["running", "stopped"],
+                        },
                     ]
                 )
 
@@ -161,12 +164,14 @@ class BenchmarkOrchestrator:
                         "instance_id": instance["InstanceId"],
                         "instance_type": instance["InstanceType"],
                         "public_ip": instance.get("PublicIpAddress"),
-                        "private_ip": instance["PrivateIpAddress"],
+                        "private_ip": instance.get("PrivateIpAddress"),
+                        "state": instance["State"]["Name"],
                     }
                     logger.info(
-                        "Found EC2 instance: %s (%s)",
+                        "Found EC2 instance: %s (%s) - State: %s",
                         infra["ec2_instance"]["instance_id"],
                         infra["ec2_instance"]["instance_type"],
+                        infra["ec2_instance"]["state"],
                     )
                 else:
                     logger.warning("No EC2 instance found")
@@ -254,6 +259,14 @@ class BenchmarkOrchestrator:
 
             instance_id = instance_id_result.stdout.strip()
 
+            # Ensure instance is running
+            if instance_info.get("state") != "running":
+                logger.info("Starting EC2 instance...")
+                self.ec2_client.start_instances(InstanceIds=[instance_id])
+                waiter = self.ec2_client.get_waiter("instance_running")
+                waiter.wait(InstanceIds=[instance_id])
+                logger.info("Instance started successfully")
+
             # Build the remote command to run the benchmark using Docker
             remote_cmd = f"/usr/local/bin/run-polars-benchmark.sh {data_size}"
 
@@ -262,7 +275,7 @@ class BenchmarkOrchestrator:
 
             result = subprocess.run(
                 [
-                    "/usr/bin/aws",
+                    "/usr/local/bin/aws",
                     "ssm",
                     "send-command",
                     "--instance-ids",
@@ -305,7 +318,7 @@ class BenchmarkOrchestrator:
                 # Check command status
                 status_result = subprocess.run(
                     [
-                        "/usr/bin/aws",
+                        "/usr/local/bin/aws",
                         "ssm",
                         "get-command-invocation",
                         "--command-id",

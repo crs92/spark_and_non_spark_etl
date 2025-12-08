@@ -1,36 +1,39 @@
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: spark-service-account
+  name: spark-sa
   namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
-  name: spark-cluster-role
+  name: spark-role
+  namespace: default
 rules:
 - apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["*"]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["create", "get", "list", "watch", "delete", "patch", "update", "deletecollection"]
 - apiGroups: [""]
-  resources: ["services"]
-  verbs: ["*"]
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["*"]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
-  verbs: ["*"]
+  verbs: ["create", "get", "list", "watch", "delete", "deletecollection"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["create", "get", "list", "delete", "deletecollection"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
-  name: spark-cluster-role-binding
+  name: spark-role-binding
+  namespace: default
 subjects:
 - kind: ServiceAccount
-  name: spark-service-account
+  name: spark-sa
   namespace: default
 roleRef:
-  kind: ClusterRole
-  name: spark-cluster-role
+  kind: Role
+  name: spark-role
   apiGroup: rbac.authorization.k8s.io

@@ -110,6 +110,19 @@ resource "aws_iam_role_policy" "polars_s3_access" {
           var.s3_bucket_arn,
           "${var.s3_bucket_arn}/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::ccorsetti",
+          "arn:aws:s3:::ccorsetti/*"
+        ]
       }
     ]
   })
@@ -145,6 +158,32 @@ resource "aws_iam_role_policy" "polars_cloudwatch" {
 resource "aws_iam_role_policy_attachment" "polars_ssm" {
   role       = aws_iam_role.polars_ec2.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+# IAM Policy for ECR access (to pull and push Docker images)
+resource "aws_iam_role_policy" "polars_ecr_access" {
+  name_prefix = "ecr-access-"
+  role        = aws_iam_role.polars_ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
 # IAM Instance Profile

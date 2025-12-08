@@ -39,7 +39,7 @@ variable "spark_workers_config" {
     desired_size  = number
   })
   default = {
-    instance_type = "m7g.large"
+    instance_type = "m5.large"
     min_size      = 2
     max_size      = 10
     desired_size  = 2
@@ -55,7 +55,7 @@ variable "polars_workers_config" {
     desired_size  = number
   })
   default = {
-    instance_type = "m7g.large"
+    instance_type = "m5.large"
     min_size      = 0
     max_size      = 2
     desired_size  = 0
@@ -65,7 +65,7 @@ variable "polars_workers_config" {
 variable "node_arch" {
   description = "CPU architecture for EKS nodes: x86 or arm"
   type        = string
-  default     = "arm"
+  default     = "x86"
 }
 
 # EC2 Variables for Polars

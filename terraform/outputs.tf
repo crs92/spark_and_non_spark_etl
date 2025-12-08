@@ -15,10 +15,10 @@ output "cluster_security_group_id" {
   value       = module.eks.cluster_security_group_id
 }
 
-output "cluster_oidc_issuer" {
-  description = "OIDC issuer URL for the EKS cluster"
-  value       = module.eks.oidc_issuer
-}
+# output "cluster_oidc_issuer" {
+#   description = "OIDC issuer URL for the EKS cluster"
+#   value       = module.eks.oidc_issuer
+# }
 
 output "s3_bucket_name" {
   description = "Name of the S3 bucket for benchmark data"

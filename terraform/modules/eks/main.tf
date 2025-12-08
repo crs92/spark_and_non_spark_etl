@@ -3,7 +3,7 @@
 
 locals {
   ami_type_map = {
-    x86 = "AL2023_X86_64_STANDARD"
+    x86 = "AL2023_x86_64_STANDARD"
     arm = "AL2023_ARM_64_STANDARD"
   }
 
@@ -179,4 +179,12 @@ resource "aws_eks_node_group" "polars_workers" {
     aws_iam_role_policy_attachment.node_cni_policy,
     aws_iam_role_policy_attachment.node_registry_policy,
   ]
+}
+
+# EKS Pod Identity Agent Add-on
+resource "aws_eks_addon" "pod_identity_agent" {
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "eks-pod-identity-agent"
+  # The version can be omitted to use the latest compatible version,
+  # or you can pin it to a specific version if needed.
 }
