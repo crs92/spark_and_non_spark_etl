@@ -1,6 +1,7 @@
 #!/bin/bash
 # User data script for Polars ETL EC2 instance
-# This script runs on first boot to set up Docker and pull the Polars image
+# This script runs on first boot to set up Docker, SSM agent, and pull the Polars image
+# SSM agent is required for remote command execution via AWS Systems Manager
 
 set -e
 
@@ -15,14 +16,19 @@ echo "Timestamp: $(date)"
 echo "Updating system packages..."
 dnf update -y
 
-# Install Docker and CloudWatch agent
-echo "Installing Docker and CloudWatch agent..."
-dnf install -y docker amazon-cloudwatch-agent
+# Install Docker, CloudWatch agent, and SSM agent
+echo "Installing Docker, CloudWatch agent, and SSM agent..."
+dnf install -y docker amazon-cloudwatch-agent amazon-ssm-agent
 
 # Start and enable Docker
 echo "Starting Docker service..."
 systemctl start docker
 systemctl enable docker
+
+# Start and enable SSM agent
+echo "Starting SSM agent..."
+systemctl start amazon-ssm-agent
+systemctl enable amazon-ssm-agent
 
 # Add ec2-user to docker group (for non-root access)
 usermod -aG docker ec2-user
