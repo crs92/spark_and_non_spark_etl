@@ -3,8 +3,16 @@
 This module provides configuration and utilities for accessing the NYC
 Taxi public dataset from S3, handling schema evolution, and defining
 data size configurations for benchmarking.
+
+Data Localization:
+    The NYC Taxi data is localized to s3://ccorsetti/nyc-taxi/ in eu-central-1
+    for stable benchmarks and to avoid cross-region transfer costs.
+
+    Original source: s3://nyc-tlc/trip data/ (us-east-1) - no longer accessible
+    Localized data: s3://ccorsetti/nyc-taxi/{size}/ (eu-central-1)
 """
 
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -21,6 +29,13 @@ class DataSize(Enum):
     XXLARGE = "xxlarge"
 
 
+# S3 bucket configuration
+# Use localized data in eu-central-1 for stable benchmarks
+# Override with NYC_TAXI_BUCKET environment variable if needed
+DEFAULT_BUCKET = "s3://ccorsetti/nyc-taxi"
+NYC_TAXI_BUCKET = os.getenv("NYC_TAXI_BUCKET", DEFAULT_BUCKET)
+
+
 @dataclass
 class NYCTaxiDataset:
     """Configuration for a NYC Taxi dataset."""
@@ -32,8 +47,12 @@ class NYCTaxiDataset:
     approx_size_gb: float
     approx_records: int
 
-    def get_file_list(self) -> list[str]:
+    def get_file_list(self, use_localized: bool = True) -> list[str]:
         """Generate list of S3 file paths for this dataset.
+
+        Args:
+            use_localized: If True, use localized bucket (s3://ccorsetti/nyc-taxi/)
+                          If False, use original bucket (s3://nyc-tlc/trip data/)
 
         Returns:
             List of S3 paths to parquet files
@@ -42,11 +61,19 @@ class NYCTaxiDataset:
         start = datetime.strptime(self.start_date, "%Y-%m")
         end = datetime.strptime(self.end_date, "%Y-%m")
 
+        # Determine base path
+        if use_localized:
+            # Use localized data organized by size
+            base_path = f"{NYC_TAXI_BUCKET}/{self.name}"
+        else:
+            # Use original NYC TLC bucket (may not be accessible)
+            base_path = "s3://nyc-tlc/trip data"
+
         current = start
         while current <= end:
             year_month = current.strftime("%Y-%m")
             # NYC TLC uses yellow_tripdata prefix
-            file_path = f"s3://nyc-tlc/trip data/yellow_tripdata_{year_month}.parquet"
+            file_path = f"{base_path}/yellow_tripdata_{year_month}.parquet"
             files.append(file_path)
 
             # Move to next month
@@ -56,6 +83,14 @@ class NYCTaxiDataset:
                 current = current.replace(month=current.month + 1)
 
         return files
+
+    def get_s3_path(self) -> str:
+        """Get the S3 path for this dataset.
+
+        Returns:
+            S3 path to the dataset directory
+        """
+        return f"{NYC_TAXI_BUCKET}/{self.name}/"
 
 
 # Predefined dataset configurations for benchmarking

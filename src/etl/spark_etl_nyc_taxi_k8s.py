@@ -55,18 +55,51 @@ def main():
     logger.info("Spark Master: %s", spark.sparkContext.master)
     logger.info("Spark App ID: %s", spark.sparkContext.applicationId)
 
-    # For tiny dataset, use a single file
-    if args.size == "tiny":
-        input_path = "s3a://ccorsetti/nyc-taxi/small/yellow_tripdata_2022-01.parquet"
-    else:
-        input_path = f"s3a://ccorsetti/nyc-taxi/{args.size}/*.parquet"
-
-    logger.info("Reading from: %s", input_path)
-
     # EXTRACT
     logger.info("EXTRACT: Reading data...")
     extract_start = time.time()
-    df = spark.read.parquet(input_path)
+
+    # Read data with schema evolution handling by year
+    # This handles different schemas across years (e.g., passenger_count DOUBLE vs BIGINT)
+    if args.size == "tiny":
+        # Tiny: single file from 2022
+        df = spark.read.parquet(
+            "s3a://ccorsetti/nyc-taxi/small/yellow_tripdata_2022-01.parquet"
+        )
+    elif args.size == "small":
+        # Small: 2022-01 only (1 year)
+        df = spark.read.parquet(
+            "s3a://ccorsetti/nyc-taxi/small/yellow_tripdata_2022-01.parquet"
+        )
+    elif args.size == "medium":
+        # Medium: 2021-2022 (2 years)
+        df = spark.read.parquet(
+            "s3a://ccorsetti/nyc-taxi/medium/yellow_tripdata_2022-*.parquet"
+        )
+    elif args.size == "large":
+        # Large: 2019-2022 (4 years) - read year by year to handle schema evolution
+        dfs = []
+        for year in [2019, 2020, 2021, 2022, 2023]:
+            for month in range(1, 13):
+                try:
+                    year_df = spark.read.parquet(
+                        f"s3a://ccorsetti/nyc-taxi/large/yellow_tripdata_{year}-{month:02d}.parquet"
+                    )
+                    dfs.append(year_df)
+                    logger.info("Read data for year %d", year)
+                except Exception as e:
+                    logger.warning("Failed to read year %d: %s", year, e)
+
+        if not dfs:
+            raise RuntimeError("No data read from any year")
+
+        # Union all years with schema evolution support
+        df = dfs[0]
+        for year_df in dfs[1:]:
+            df = df.unionByName(year_df, allowMissingColumns=True)
+    else:
+        raise ValueError(f"Unknown size: {args.size}")
+
     initial_count = df.count()
     logger.info("Read %d records in %.2fs", initial_count, time.time() - extract_start)
 

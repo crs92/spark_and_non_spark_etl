@@ -22,7 +22,7 @@ spec:
   mode: cluster
 
   # Container image from ECR (working Pod Identity configuration)
-  image: "764738119924.dkr.ecr.eu-central-1.amazonaws.com/spark-etl:minimal"
+  image: "764738119924.dkr.ecr.eu-central-1.amazonaws.com/spark-etl:latest"
   imagePullPolicy: Always
 
   # Main Python application file (included in container image)

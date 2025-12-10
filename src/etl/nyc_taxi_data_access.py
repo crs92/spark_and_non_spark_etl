@@ -79,8 +79,20 @@ class NYCTaxiDataReader:
 
         logger.info("Successfully read %d/%d files", successful_reads, len(self.files))
 
+        # Handle schema evolution: cast passenger_count from Float64 to Int64 if needed
+        normalized_dfs = []
+        for df_item in dfs:
+            if (
+                "passenger_count" in df_item.columns
+                and df_item.schema["passenger_count"] == pl.Float64
+            ):
+                df_item = df_item.with_columns(  # noqa: PLW2901
+                    pl.col("passenger_count").cast(pl.Int64)
+                )
+            normalized_dfs.append(df_item)
+
         # Concatenate all dataframes
-        combined_df = pl.concat(dfs)
+        combined_df = pl.concat(normalized_dfs)
         logger.info("Combined dataset: %d records", len(combined_df))
 
         # Validate data

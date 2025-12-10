@@ -22,12 +22,11 @@ spec:
   mode: cluster
 
   # Container image from ECR
-  # Replace ACCOUNT_ID and REGION with actual values from: terraform output
-  image: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/spark-etl:latest"
+  image: "764738119924.dkr.ecr.eu-central-1.amazonaws.com/spark-etl:latest"
   imagePullPolicy: Always
 
   # Main Python application file (included in container image)
-  mainApplicationFile: "local:///app/src/etl/spark_etl_nyc_taxi.py"
+  mainApplicationFile: "local:///opt/spark/work-dir/spark_etl_nyc_taxi_k8s.py"
 
   # Arguments for NYC Taxi ETL - SMALL dataset
   arguments:
@@ -36,16 +35,19 @@ spec:
     - "--output"
     - "/tmp/output"
     - "--s3-bucket"
-    - "s3://etl-benchmark-data-ACCOUNT_ID"  # Replace with actual bucket name
+    - "s3://etl-benchmark-data-764738119924"
 
   # Spark version
   sparkVersion: "3.5.0"
 
-  # Spark configuration optimized for SMALL dataset
+  # Spark configuration optimized for SMALL dataset with Pod Identity
   sparkConf:
     # S3A Configuration for Pod Identity
     "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
-    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+    "spark.hadoop.fs.s3a.endpoint.region": "eu-central-1"
+    "spark.driver.extraClassPath": "/opt/spark/jars/hadoop-aws-3.3.4.jar:/opt/spark/jars/aws-java-sdk-bundle-1.12.770.jar"
+    "spark.executor.extraClassPath": "/opt/spark/jars/hadoop-aws-3.3.4.jar:/opt/spark/jars/aws-java-sdk-bundle-1.12.770.jar"
     "spark.hadoop.fs.s3a.fast.upload": "true"
     "spark.hadoop.fs.s3a.block.size": "128M"
     "spark.hadoop.fs.s3a.multipart.size": "128M"
@@ -76,7 +78,7 @@ spec:
   # Hadoop configuration
   hadoopConf:
     "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
-    "fs.s3a.aws.credentials.provider": "com.amazonaws.auth.WebIdentityTokenCredentialsProvider"
+    "fs.s3a.aws.credentials.provider": "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
 
   # Driver configuration
   driver:
@@ -106,8 +108,8 @@ spec:
 
   # Executor configuration - 3 executors for small dataset
   executor:
-    cores: 4
-    coreLimit: "4000m"
+    cores: 3
+    coreLimit: "3000m"
     memory: "8g"
     instances: 3  # Fixed for small dataset
 
@@ -136,13 +138,13 @@ spec:
     onSubmissionFailureRetries: 3
     onSubmissionFailureRetryInterval: 20
 
-  # Monitoring
-  monitoring:
-    exposeDriverMetrics: true
-    exposeExecutorMetrics: true
-    prometheus:
-      jmxExporterJar: "/prometheus/jmx_prometheus_javaagent-0.17.0.jar"
-      port: 8090
+  # Monitoring disabled (JMX exporter JAR not included in image)
+  # monitoring:
+  #   exposeDriverMetrics: true
+  #   exposeExecutorMetrics: true
+  #   prometheus:
+  #     jmxExporterJar: "/prometheus/jmx_prometheus_javaagent-0.17.0.jar"
+  #     port: 8090
 
   # Cleanup after 1 hour
   timeToLiveSeconds: 3600
