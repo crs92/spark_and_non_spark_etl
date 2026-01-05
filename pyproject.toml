@@ -11,6 +11,8 @@ dependencies = [
     "duckdb",
     "pyspark", # Include all main dependencies here
     "faker",
+    "matplotlib",  # For benchmark report charts
+    "python-pptx",  # For PowerPoint report generation
 ]
 
 [project.optional-dependencies]

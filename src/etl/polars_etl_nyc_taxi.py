@@ -119,15 +119,11 @@ class PolarsNYCTaxiETL:
             (pl.col("total_amount") / pl.col("trip_distance")).alias("price_per_mile")
         )
 
-        # Extract date components
-        logger.info("Extracting date components...")
-        self.df = self.df.with_columns([
-            pl.col("pickup_datetime").dt.year().alias("year"),
-            pl.col("pickup_datetime").dt.month().alias("month"),
-            pl.col("pickup_datetime").dt.day().alias("day"),
-            pl.col("pickup_datetime").dt.hour().alias("hour"),
-            pl.col("pickup_datetime").dt.date().alias("date"),
-        ])
+        # Extract date (only, to match Spark ETL exactly)
+        logger.info("Extracting date...")
+        self.df = self.df.with_columns(
+            pl.col("pickup_datetime").dt.date().alias("date")
+        )
 
         # Handle nulls and outliers
         logger.info("Cleaning data...")

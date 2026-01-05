@@ -238,7 +238,8 @@ spark-operator-configure: ## 🔧 Configure IRSA for Spark ServiceAccount
 
 spark-operator-verify: ## ✅ Verify Spark Operator installation
 	@echo "--- Verifying Spark Operator ---"
-	@./k8s/spark-operator/verify.sh
+	@kubectl get pods -n spark-operator
+	@kubectl get sparkapplications
 
 spark-deploy: ## 🚀 Deploy Spark ETL benchmark (usage: make spark-deploy MODE=bulk SIZE=medium)
 	@echo "--- Deploying Spark ETL Benchmark ---"
@@ -277,24 +278,26 @@ tf-validate: ## ✅ Validate Terraform configuration files
 	@cd terraform && terraform validate
 
 # EC2 Polars commands
-ec2-deploy: ## 🖥️ Deploy EC2 instance for Polars (usage: make ec2-deploy TYPE=r6i.2xlarge ARCH=x86_64)
+ec2-deploy: ## 🖥️ Deploy EC2 instance for Polars via Terraform
 	@echo "--- Deploying EC2 instance for Polars ---"
-	@./scripts/deploy_ec2_polars.sh $(or $(TYPE),r6i.2xlarge) $(or $(ARCH),x86_64)
+	@echo "Setting ec2_create_instance=true in terraform.tfvars..."
+	@cd terraform && terraform apply -var="ec2_create_instance=true"
 
 ec2-deploy-graviton: ## 🦾 Deploy Graviton EC2 instance for Polars (20% cost savings)
 	@echo "--- Deploying Graviton EC2 instance ---"
-	@./scripts/deploy_ec2_polars.sh r7g.2xlarge arm64
+	@cd terraform && terraform apply -var="ec2_create_instance=true" -var="ec2_instance_type=r7g.2xlarge" -var="ec2_architecture=arm64"
 
-ec2-benchmark: ## 📊 Run benchmark on EC2 (usage: make ec2-benchmark SIZE=small)
+ec2-benchmark: ## 📊 Run benchmark on EC2 via SSH (usage: make ec2-benchmark SIZE=small)
 	@echo "--- Running EC2 Polars benchmark ---"
-	@./scripts/run_ec2_benchmark.sh $(or $(SIZE),small)
+	@echo "SSH to instance and run: python -m src.etl.polars_etl_nyc_taxi --size $(or $(SIZE),small)"
+	@cd terraform && eval $$(terraform output -raw ec2_ssh_command) "cd /opt/etl-benchmark && python -m src.etl.polars_etl_nyc_taxi --size $(or $(SIZE),small)"
 
 ec2-benchmark-all: ## 🏆 Run all EC2 benchmarks (tiny through large)
 	@echo "--- Running all EC2 benchmarks ---"
-	@./scripts/run_ec2_benchmark.sh tiny
-	@./scripts/run_ec2_benchmark.sh small
-	@./scripts/run_ec2_benchmark.sh medium
-	@./scripts/run_ec2_benchmark.sh large
+	@$(MAKE) ec2-benchmark SIZE=tiny
+	@$(MAKE) ec2-benchmark SIZE=small
+	@$(MAKE) ec2-benchmark SIZE=medium
+	@$(MAKE) ec2-benchmark SIZE=large
 
 ec2-ssh: ## 🔐 SSH to EC2 instance (auto-detected)
 	@echo "--- Connecting to EC2 instance ---"

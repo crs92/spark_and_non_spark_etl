@@ -165,6 +165,12 @@ echo "Docker Image: $POLARS_IMAGE"
 echo "Timestamp: $(date)"
 echo "=========================================="
 
+# Pull latest Docker image
+echo "Pulling latest Polars ETL image..."
+aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+docker pull $POLARS_IMAGE
+echo "Image pulled successfully"
+
 # Get AWS credentials from EC2 instance metadata (IMDSv2)
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
 ROLE_NAME=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/iam/security-credentials/ 2>/dev/null)

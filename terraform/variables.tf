@@ -39,10 +39,10 @@ variable "spark_workers_config" {
     desired_size  = number
   })
   default = {
-    instance_type = "m5.large"
+    instance_type = "m6i.xlarge"  # 4 vCPUs, 16GB RAM
     min_size      = 2
-    max_size      = 10
-    desired_size  = 2
+    max_size      = 12            # Allow scaling up to large datasets
+    desired_size  = 2             # Start with 2 nodes for small/medium
   }
 }
 
