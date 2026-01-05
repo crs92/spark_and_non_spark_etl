@@ -20,6 +20,8 @@ This is not about proving one technology is "better" - it's about showing **when
 - **Crossover Point**: Data size where distributed processing becomes cost-effective
 - **TCO**: Total Cost of Ownership (compute + operational overhead)
 - **NYC TLC**: NYC Taxi and Limousine Commission (data provider)
+- **Data Localization**: Copying data to the same AWS region as compute resources to eliminate cross-region transfer costs and latency
+- **Cross-Region Transfer**: Data movement between AWS regions that incurs network costs and latency
 
 ## Requirements
 
@@ -62,7 +64,7 @@ This is not about proving one technology is "better" - it's about showing **when
 
 #### Acceptance Criteria
 
-1. WHEN accessing data THEN the system SHALL read directly from the public NYC Taxi S3 bucket (s3://nyc-tlc/trip data/)
+1. WHEN accessing data THEN the system SHALL read from a localized S3 bucket in eu-central-1 containing NYC Taxi data
 2. WHEN processing data THEN the system SHALL perform realistic ETL operations: filter invalid trips, calculate metrics, aggregate by location
 3. WHEN scaling tests THEN the system SHALL use actual data sizes: 1 month (~1GB), 1 year (~10GB), 5 years (~50GB), 10 years (~100GB)
 4. WHEN measuring performance THEN the system SHALL track end-to-end time including S3 read, processing, and write operations
@@ -112,3 +114,15 @@ This is not about proving one technology is "better" - it's about showing **when
 2. WHEN creating IAM roles THEN the system SHALL associate them directly with EKS pods using Pod Identity
 3. WHEN Spark pods access S3 THEN the system SHALL automatically assume the correct IAM role without manual ServiceAccount annotations
 4. WHEN documenting setup THEN the system SHALL explain the benefits of Pod Identity over IRSA (simpler configuration, better security)
+
+### Requirement 9
+
+**User Story:** As a performance engineer, I want to localize NYC Taxi data to eu-central-1 before running benchmarks, so that I measure compute performance rather than network latency and avoid cross-region transfer costs.
+
+#### Acceptance Criteria
+
+1. WHEN the source data is in us-east-1 and compute resources are in eu-central-1 THEN the system SHALL copy data to a local S3 bucket before benchmarking
+2. WHEN copying data THEN the system SHALL use EC2 instance with high network bandwidth to perform S3-to-S3 transfer within AWS backbone
+3. WHEN selecting data subsets THEN the system SHALL copy specific time ranges: 1 month for small tests, 1 year for medium tests, 5 years for large tests
+4. WHEN data localization is complete THEN the system SHALL update configuration to read from the eu-central-1 bucket
+5. WHEN benchmarks run THEN the system SHALL read data from the same region as compute resources to ensure consistent performance measurements

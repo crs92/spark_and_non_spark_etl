@@ -324,6 +324,30 @@ class StackResult:
     resource_efficiency: ResourceEfficiency
 ```
 
+## Correctness Properties
+
+*A property is a characteristic or behavior that should hold true across all valid executions of a system-essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+
+### Property 1: Cross-region detection triggers localization
+
+*For any* source data region and compute region pair, when they differ, the system should initiate data localization before benchmarking.
+**Validates: Requirements 9.1**
+
+### Property 2: Dataset size maps to correct time range
+
+*For any* dataset size request (small, medium, large), the system should copy the correct time range: small → 1 month, medium → 1 year, large → 5 years.
+**Validates: Requirements 9.3**
+
+### Property 3: Configuration updates after localization
+
+*For any* completed data localization operation, the system configuration should point to the local bucket in the target region.
+**Validates: Requirements 9.4**
+
+### Property 4: Region consistency during benchmarks
+
+*For any* benchmark execution, the data source region should match the compute resource region.
+**Validates: Requirements 9.5**
+
 ## Error Handling
 
 ### Error Categories and Strategies
@@ -357,6 +381,27 @@ class ErrorHandler:
 
 ## Testing Strategy
 
+### Property-Based Testing
+
+**Testing Framework**: Hypothesis (Python property-based testing library)
+
+**Configuration**: Each property-based test will run a minimum of 100 iterations to ensure statistical confidence.
+
+**Property Tests for Data Localization**:
+
+1. **Property 1: Cross-region detection** - Generate random region pairs and verify localization triggers when regions differ
+2. **Property 2: Dataset size mapping** - Generate random dataset size requests and verify correct time range selection
+3. **Property 3: Configuration updates** - Generate random localization scenarios and verify configuration updates
+4. **Property 4: Region consistency** - Generate random benchmark configurations and verify region matching
+
+**Test Tagging**: Each property-based test will include a comment explicitly referencing the correctness property:
+```python
+# Feature: pythonic-etl-benchmark, Property 1: Cross-region detection triggers localization
+@given(source_region=regions(), compute_region=regions())
+def test_cross_region_detection(source_region, compute_region):
+    ...
+```
+
 ### Unit Testing
 
 **ETL Logic Testing**:
@@ -368,6 +413,11 @@ class ErrorHandler:
 - **Metric Collection Accuracy**: Validate resource monitoring precision
 - **Configuration Validation**: Test parameter validation and error handling
 - **Result Aggregation**: Verify statistical calculations and report generation
+
+**Data Localization Testing**:
+- **S3 Copy Verification**: Verify files are copied correctly to local bucket
+- **Configuration Update**: Verify config points to correct bucket after localization
+- **Error Handling**: Test behavior when source bucket is inaccessible
 
 ### Integration Testing
 
@@ -494,39 +544,126 @@ spec:
     instances: 3
 ```
 
-### NYC Taxi Data Access Strategy
+### NYC Taxi Data Localization Strategy
 
-**Input Data** (No upload needed!):
+**Problem**: The NYC Taxi public dataset is in `s3://nyc-tlc/trip data/` (us-east-1), but our compute resources are in eu-central-1. Cross-region data access causes:
+1. **Network Latency**: Streaming gigabytes across the Atlantic introduces jitter and unstable benchmark results
+2. **Data Transfer Costs**: AWS charges $0.02/GB for cross-region transfer out of us-east-1
+3. **Performance Measurement**: Benchmarks would measure internet speed, not Spark/Polars performance
+
+**Solution**: "Copy Once, Read Locally" - Use EC2 instance to perform one-time S3-to-S3 copy within AWS backbone.
+
+**Data Localization Architecture**:
+```mermaid
+graph LR
+    subgraph "us-east-1"
+        SOURCE[NYC TLC Public Bucket<br/>s3://nyc-tlc/trip data/]
+    end
+
+    subgraph "eu-central-1"
+        EC2[EC2 Instance<br/>High Bandwidth]
+        LOCAL[Local S3 Bucket<br/>s3://etl-benchmark-data-*/nyc-taxi/]
+        POLARS[Polars ETL]
+        SPARK[Spark ETL]
+    end
+
+    SOURCE -->|One-time copy<br/>S3-to-S3| EC2
+    EC2 -->|Write| LOCAL
+    LOCAL -->|Read| POLARS
+    LOCAL -->|Read| SPARK
 ```
-s3://nyc-tlc/trip data/
-├── yellow_tripdata_2022-01.parquet  # ~100MB, 3M records
-├── yellow_tripdata_2022-02.parquet
-├── ...
-└── yellow_tripdata_2009-01.parquet  # Historical data back to 2009
+
+**Implementation Strategy**:
+
+1. **Use Your Existing Bucket** (eu-central-1):
+```bash
+# Bucket already exists: s3://ccorsetti
+# Create subdirectory structure for NYC Taxi data
+```
+
+2. **Use EC2 for Transfer** (10-25 Gbps network bandwidth):
+```bash
+# SSH into EC2 instance (r6g.2xlarge or similar)
+
+# SMALL DATASET (~40MB, 1 month)
+aws s3 cp \
+  s3://nyc-tlc/trip\ data/yellow_tripdata_2022-01.parquet \
+  s3://ccorsetti/nyc-taxi/small/ \
+  --source-region us-east-1 \
+  --region eu-central-1
+
+# MEDIUM DATASET (~1.2GB, 1 year)
+aws s3 sync \
+  s3://nyc-tlc/trip\ data/ \
+  s3://ccorsetti/nyc-taxi/medium/ \
+  --exclude "*" \
+  --include "yellow_tripdata_2022-*.parquet" \
+  --source-region us-east-1 \
+  --region eu-central-1
+
+# LARGE DATASET (~10GB, 5 years)
+for year in {2018..2022}; do
+  aws s3 sync \
+    s3://nyc-tlc/trip\ data/ \
+    s3://ccorsetti/nyc-taxi/large/ \
+    --exclude "*" \
+    --include "yellow_tripdata_${year}-*.parquet" \
+    --source-region us-east-1 \
+    --region eu-central-1
+done
+```
+
+3. **Update Configuration** to read from local bucket:
+```python
+# Before (cross-region)
+INPUT_PATH = "s3://nyc-tlc/trip data/"
+
+# After (localized)
+INPUT_PATH = f"s3://ccorsetti/nyc-taxi/{size}/"
+```
+
+**Benefits**:
+- **Stability**: Consistent read times, scientific benchmarks
+- **Cost**: Pay transfer fee once (~$0.02/GB), subsequent reads are free within region
+- **Speed**: S3-to-EC2 bandwidth within region is massive (up to 100 Gbps)
+- **Fair Comparison**: Both Polars and Spark read from same local source
+
+**Cost Analysis**:
+```python
+# One-time transfer cost
+small_transfer = 0.04 GB × $0.02 = $0.0008
+medium_transfer = 1.2 GB × $0.02 = $0.024
+large_transfer = 10 GB × $0.02 = $0.20
+
+# Savings per benchmark run (avoiding cross-region reads)
+# Multiple runs × multiple tests = significant savings
+```
+
+**Input Data** (After localization):
+```
+s3://ccorsetti/nyc-taxi/
+├── small/
+│   └── yellow_tripdata_2022-01.parquet  # ~40MB, 3M records
+├── medium/
+│   └── yellow_tripdata_2022-*.parquet   # ~1.2GB, 40M records (12 files)
+└── large/
+    └── yellow_tripdata_{2018-2022}-*.parquet  # ~10GB, 200M records (60 files)
 ```
 
 **Output Data** (Benchmark results):
 ```
-s3://etl-benchmark-results-${account_id}/
+s3://ccorsetti/benchmark-results/
 ├── polars/
-│   ├── tiny/
+│   ├── small/
 │   │   ├── results.parquet
 │   │   └── metrics.json
-│   ├── small/
 │   ├── medium/
 │   └── large/
 └── spark/
-    ├── tiny/
     ├── small/
     ├── medium/
     └── large/
 ```
-
-**Cost Savings**:
-- No data generation compute needed
-- No S3 upload costs
-- No S3 storage costs for input data
-- Only pay for output storage (minimal)
 
 ### Cost Tracking and Optimization
 
