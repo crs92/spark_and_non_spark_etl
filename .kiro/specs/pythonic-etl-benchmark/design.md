@@ -2,695 +2,967 @@
 
 ## Overview
 
-The "Vertical vs. Horizontal Scaling" benchmark demonstrates when distributed processing becomes necessary by comparing single-node Polars (EC2) against distributed Spark (EKS). Using the real-world NYC Taxi dataset, we identify the **crossover point** where the complexity of distributed systems becomes justified.
+This POC implements a comprehensive comparison between traditional distributed processing (PySpark on EKS) and modern single-node high-performance engines (Polars + DuckDB on AWS Batch). The system consists of five major components:
 
-**Key Design Principles:**
+1. **TPC-H Data Generator**: Creates industry-standard benchmark data at configurable scales
+2. **PySpark ETL Baseline**: Implements complex analytical queries on EKS with full observability
+3. **Polars/DuckDB ETL Challenger**: Implements the same queries using modern optimization techniques on AWS Batch
+4. **Multi-Job Orchestrator**: Stress-tests both systems with concurrent job execution
+5. **Analysis Dashboard**: Compares performance and cost metrics
 
-1. **Fair Comparison**: Identical ETL logic, same data source, same AWS region
-2. **Real Data**: NYC Taxi public dataset (no synthetic data generation needed)
-3. **Cost-Focused**: Track TCO including infrastructure, operational overhead, and execution time
-4. **Narrative-Driven**: "Ant vs. Cannon" - when do you need the cannon?
-5. **Production-Ready**: Both implementations use production-grade tools and best practices
-
-**The Question We Answer:** At what data size does the operational complexity of Spark become worth it?
+The design emphasizes **clean separation of concerns**, **reproducibility**, and **production-grade code quality** suitable for a Senior Data Engineering POC.
 
 ## Architecture
 
-### High-Level Architecture: "Ant vs. Cannon"
+### High-Level Architecture
 
-```mermaid
-graph TB
-    subgraph "Data Source"
-        NYC[NYC Taxi Public S3<br/>s3://nyc-tlc/trip data/]
-    end
-
-    subgraph "Vertical Scaling: The Ant"
-        EC2[Single EC2 Instance<br/>r6i.2xlarge: 8 vCPU, 64GB RAM]
-        POLARS[Polars ETL<br/>Python + s3fs]
-    end
-
-    subgraph "Horizontal Scaling: The Cannon"
-        EKS[EKS Cluster]
-        SO[Spark Operator]
-        DRIVER[Spark Driver]
-        EXEC1[Executor 1]
-        EXEC2[Executor 2]
-        EXEC3[Executor N]
-    end
-
-    subgraph "Results Storage"
-        S3OUT[Benchmark S3 Bucket<br/>Output + Metrics]
-    end
-
-    subgraph "Analysis"
-        METRICS[Metrics Collector]
-        REPORT[Cost & Performance Report]
-    end
-
-    NYC --> EC2
-    NYC --> EKS
-
-    EC2 --> POLARS
-    POLARS --> S3OUT
-
-    EKS --> SO
-    SO --> DRIVER
-    DRIVER --> EXEC1
-    DRIVER --> EXEC2
-    DRIVER --> EXEC3
-    EXEC1 --> S3OUT
-    EXEC2 --> S3OUT
-    EXEC3 --> S3OUT
-
-    S3OUT --> METRICS
-    METRICS --> REPORT
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         AWS Cloud                                │
+│                                                                   │
+│  ┌──────────────────┐                                            │
+│  │  TPC-H Generator │                                            │
+│  │    (DuckDB)      │──────┐                                     │
+│  └──────────────────┘      │                                     │
+│                             ▼                                     │
+│                      ┌─────────────┐                             │
+│                      │  S3 Bucket  │                             │
+│                      │  TPC-H Data │                             │
+│                      │  (Parquet)  │                             │
+│                      └─────────────┘                             │
+│                        │         │                               │
+│           ┌────────────┘         └────────────┐                  │
+│           ▼                                   ▼                  │
+│  ┌─────────────────┐                 ┌──────────────────┐       │
+│  │   EKS Cluster   │                 │   AWS Batch      │       │
+│  │                 │                 │   (Fargate)      │       │
+│  │  ┌───────────┐  │                 │                  │       │
+│  │  │  Spark    │  │                 │  ┌────────────┐  │       │
+│  │  │ Operator  │  │                 │  │  Polars +  │  │       │
+│  │  └───────────┘  │                 │  │  DuckDB    │  │       │
+│  │       │         │                 │  │   Job      │  │       │
+│  │       ▼         │                 │  └────────────┘  │       │
+│  │  ┌───────────┐  │                 │                  │       │
+│  │  │ PySpark   │  │                 └──────────────────┘       │
+│  │  │   Jobs    │  │                          │                 │
+│  │  └───────────┘  │                          │                 │
+│  └─────────────────┘                          │                 │
+│           │                                    │                 │
+│           └────────────┬───────────────────────┘                 │
+│                        ▼                                         │
+│                 ┌─────────────┐                                  │
+│                 │  S3 Bucket  │                                  │
+│                 │   Results   │                                  │
+│                 │  & Metrics  │                                  │
+│                 └─────────────┘                                  │
+│                        │                                         │
+│                        ▼                                         │
+│                 ┌─────────────┐                                  │
+│                 │  Analysis   │                                  │
+│                 │  Dashboard  │                                  │
+│                 └─────────────┘                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Component Architecture
+### Component Interaction Flow
 
-The system follows a modular architecture with clear separation of concerns:
+1. **Data Generation Phase**:
+   - TPC-H Generator runs locally or on EC2
+   - Generates data using DuckDB's TPC-H extension
+   - Writes partitioned Parquet files directly to S3
 
-1. **Data Source**: NYC Taxi public S3 bucket (no data generation needed)
-2. **ETL Implementations**: Identical business logic in Polars (EC2) and Spark (EKS)
-3. **Infrastructure**: EC2 for vertical scaling, EKS for horizontal scaling
-4. **Metrics Collection**: CloudWatch for both EC2 and EKS monitoring
-5. **Cost Analysis**: Automated TCO calculation including operational overhead
+2. **Benchmark Execution Phase**:
+   - Orchestrator submits jobs to both EKS and AWS Batch
+   - PySpark jobs run on EKS via Spark Operator
+   - Polars/DuckDB jobs run on AWS Batch Fargate
+   - Both read from same S3 TPC-H data
+   - Both write results and metrics to S3
 
-### NYC Taxi ETL Logic
-
-Both implementations perform identical operations on the NYC Taxi dataset:
-
-**1. Extract**
-- Read Parquet files from `s3://nyc-tlc/trip data/`
-- Support date range selection (1 month to 10 years)
-- Handle schema evolution across years
-
-**2. Transform**
-- **Filter**: Remove invalid trips (passenger_count > 0, trip_distance > 0, fare_amount > 0)
-- **Calculate**: price_per_mile = total_amount / trip_distance
-- **Enrich**: Add date components (year, month, day, hour)
-- **Clean**: Handle nulls and outliers
-
-**3. Aggregate**
-- Group by PULocationID (pickup location) and date
-- Calculate: avg_fare, avg_distance, avg_price_per_mile, trip_count
-- Sort by trip_count descending
-
-**4. Load**
-- Write results to benchmark S3 bucket as Parquet
-- Include metadata: execution_time, record_count, data_size_gb
-
-### AWS EKS Architecture
-
-```mermaid
-graph TB
-    subgraph "AWS Cloud"
-        subgraph "EKS Cluster"
-            SO[Spark Operator]
-            SD[Spark Driver Pod]
-            SE1[Spark Executor Pod 1]
-            SE2[Spark Executor Pod 2]
-            SE3[Spark Executor Pod 3]
-            PJ[Polars Job Pod]
-
-            SO --> SD
-            SD --> SE1
-            SD --> SE2
-            SD --> SE3
-        end
-
-        subgraph "Storage"
-            S3[S3 Bucket]
-            ECR[ECR Registry]
-        end
-
-        subgraph "Monitoring"
-            CW[CloudWatch]
-            CM[Container Insights]
-        end
-    end
-
-    SD --> S3
-    SE1 --> S3
-    SE2 --> S3
-    SE3 --> S3
-    PJ --> S3
-
-    EKS --> CW
-    EKS --> CM
-
-    ECR --> SD
-    ECR --> PJ
-```
-
-**EKS Deployment Strategy**:
-- **Spark Workloads**: Spark Operator manages SparkApplication CRDs with dynamic executor scaling
-- **Data Access**: Read from public NYC Taxi S3 bucket, write to benchmark bucket
-- **Authentication**: EKS Pod Identity Association (simpler than IRSA, no ServiceAccount annotations)
-- **Container Images**: ECR for Docker image storage and versioning
-- **Resource Monitoring**: CloudWatch Container Insights for pod-level metrics
-
-**EC2 Deployment Strategy**:
-- **Single Instance**: r6i.2xlarge or r6i.4xlarge (Graviton for cost savings)
-- **Software**: Python 3.12, Polars, s3fs, boto3
-- **Data Access**: Direct S3 read/write using IAM instance profile
-- **Monitoring**: CloudWatch agent for instance metrics
+3. **Analysis Phase**:
+   - Analysis script reads metrics from S3
+   - Calculates performance and cost comparisons
+   - Generates Markdown reports and visualizations
 
 ## Components and Interfaces
 
-### Benchmark Controller
+### Component 1: TPC-H Data Generator
 
-**Purpose**: Central orchestration of benchmark execution across different environments and configurations.
+**Purpose**: Generate industry-standard TPC-H benchmark data at configurable scales.
 
-**Key Components**:
-- `BenchmarkOrchestrator`: Main controller for test execution
-- `EnvironmentManager`: Handles deployment target abstraction
-- `ConfigurationManager`: Manages test parameters and scenarios
-- `MetricsCollector`: Aggregates performance data from multiple sources
+**Technology Stack**: Python, DuckDB, boto3
 
-**Interfaces**:
+**Key Classes**:
+
 ```python
-class BenchmarkController:
-    def run_benchmark(self, config: BenchmarkConfig) -> BenchmarkResults
-    def generate_test_data(self, size: DataSize, characteristics: DataCharacteristics) -> Dataset
-    def deploy_environment(self, target: DeploymentTarget) -> Environment
-    def collect_metrics(self, execution: ExecutionContext) -> PerformanceMetrics
+class TPCHGenerator:
+    """Generates TPC-H data and writes to S3."""
+
+    def __init__(self, scale_factor: int, s3_bucket: str, s3_prefix: str):
+        """
+        Initialize generator.
+
+        Args:
+            scale_factor: TPC-H scale factor (10 = ~10GB, 100 = ~100GB)
+            s3_bucket: Target S3 bucket name
+            s3_prefix: S3 prefix for TPC-H data
+        """
+
+    def generate_all_tables(self) -> None:
+        """Generate all 8 TPC-H tables and write to S3."""
+
+    def generate_table(self, table_name: str, partition_by: Optional[str] = None) -> None:
+        """
+        Generate a single TPC-H table.
+
+        Args:
+            table_name: Name of TPC-H table (e.g., 'lineitem', 'orders')
+            partition_by: Optional column to partition by (for lineitem: 'l_shipdate')
+        """
 ```
 
-### ETL Implementation Layer
+**Implementation Details**:
+- Uses DuckDB's built-in TPC-H extension: `CALL dbgen(sf=10)`
+- Partitions lineitem table by year/month extracted from l_shipdate
+- Writes Parquet with Snappy compression
+- Uses DuckDB's S3 extension for direct writes (no local storage)
+- Logs progress for each table generation
 
-**Spark ETL Stack**:
-- **Technology**: PySpark + PyIceberg + distributed processing
-- **Optimization**: Adaptive query execution, dynamic partition coalescing
-- **Deployment**: Spark cluster with configurable executor instances
-
-**Pythonic ETL Stack**:
-- **Technology**: Polars + DuckDB + PyIceberg + PyArrow
-- **Optimization**: Single-node memory optimization, vectorized operations
-- **Deployment**: Single container with high memory allocation
-
-**Common Interface**:
-```python
-class ETLProcessor:
-    def process_data(self, input_path: str, output_path: str, config: ProcessingConfig) -> ProcessingResult
-    def validate_output(self, output_path: str) -> ValidationResult
-    def get_metrics(self) -> ProcessingMetrics
+**S3 Structure**:
+```
+s3://bucket/tpch-sf10/
+  ├── customer/
+  │   └── data.parquet
+  ├── lineitem/
+  │   ├── year=1992/month=01/data.parquet
+  │   ├── year=1992/month=02/data.parquet
+  │   └── ...
+  ├── nation/
+  ├── orders/
+  ├── part/
+  ├── partsupp/
+  ├── region/
+  └── supplier/
 ```
 
-### NYC Taxi Data Characteristics
+### Component 2: PySpark ETL Baseline
 
-**Data Source**: Public S3 bucket maintained by NYC TLC
-- **Location**: `s3://nyc-tlc/trip data/`
-- **Format**: Parquet (optimized for analytics)
-- **Schema**: ~20 columns including timestamps, locations, fares, distances
-- **Size**: ~100MB per file (monthly), ~1.2GB per year
-- **Time Range**: 2009-present (15+ years of data)
+**Purpose**: Implement TPC-H Query 3 or 5 using PySpark on EKS as the distributed processing baseline.
 
-**Data Sizes for Benchmarking**:
+**Technology Stack**: PySpark, Kubernetes, Spark Operator
+
+**Key Classes**:
+
 ```python
+class SparkETLJob:
+    """PySpark implementation of TPC-H analytical query."""
+
+    def __init__(self, spark: SparkSession, s3_input_path: str, s3_output_path: str):
+        """
+        Initialize Spark ETL job.
+
+        Args:
+            spark: SparkSession instance
+            s3_input_path: S3 path to TPC-H data
+            s3_output_path: S3 path for results
+        """
+
+    def load_tables(self) -> Dict[str, DataFrame]:
+        """Load required TPC-H tables from S3."""
+
+    def execute_query(self) -> DataFrame:
+        """Execute TPC-H Query 3 or 5 with joins and aggregations."""
+
+    def write_results(self, df: DataFrame) -> None:
+        """Write aggregated results to S3."""
+
+class PerformanceTracker:
+    """Tracks performance metrics for Spark jobs."""
+
+    def __init__(self):
+        self.metrics = {
+            'startup_time': 0.0,
+            'execution_time': 0.0,
+            'peak_memory_mb': 0,
+            'bytes_read': 0,
+            'bytes_written': 0
+        }
+
+    def record_startup(self, start_time: float, execution_start: float) -> None:
+        """Record time from job submission to execution start."""
+
+    def record_execution(self, start_time: float, end_time: float) -> None:
+        """Record total execution time."""
+
+    def write_metrics(self, s3_path: str) -> None:
+        """Write metrics to S3 as JSON."""
+```
+
+**Query Implementation** (TPC-H Query 3 - Shipping Priority):
+```sql
+SELECT
+    l_orderkey,
+    SUM(l_extendedprice * (1 - l_discount)) AS revenue,
+    o_orderdate,
+    o_shippriority
+FROM
+    customer, orders, lineitem
+WHERE
+    c_mktsegment = 'BUILDING'
+    AND c_custkey = o_custkey
+    AND l_orderkey = o_orderkey
+    AND o_orderdate < DATE '1995-03-15'
+    AND l_shipdate > DATE '1995-03-15'
+GROUP BY
+    l_orderkey, o_orderdate, o_shippriority
+ORDER BY
+    revenue DESC, o_orderdate
+LIMIT 10
+```
+
+**Kubernetes Deployment**:
+- Uses SparkApplication CRD (Spark Operator)
+- Configurable executor count and resources
+- Pod Identity Association for S3 access
+- Metrics exported to CloudWatch
+
+### Component 3: Polars/DuckDB ETL Challenger
+
+**Purpose**: Implement the same query using modern optimization techniques on AWS Batch.
+
+**Technology Stack**: Python, DuckDB, Polars, PyArrow, AWS Batch (Fargate)
+
+**Key Classes**:
+
+```python
+class PolarsETLJob:
+    """Polars + DuckDB implementation with optimization techniques."""
+
+    def __init__(self, s3_input_path: str, s3_output_path: str):
+        """
+        Initialize Polars ETL job.
+
+        Args:
+            s3_input_path: S3 path to TPC-H data
+            s3_output_path: S3 path for results
+        """
+
+    def setup_duckdb(self) -> duckdb.DuckDBPyConnection:
+        """Configure DuckDB with httpfs extension for S3 access."""
+
+    def execute_query_with_pushdown(self) -> pl.DataFrame:
+        """
+        Execute query using DuckDB with predicate and projection pushdown.
+
+        Returns:
+            Polars DataFrame via zero-copy handoff
+        """
+
+    def process_with_streaming(self, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Process data using Polars streaming mode for out-of-core execution.
+
+        Args:
+            df: Input Polars DataFrame
+
+        Returns:
+            Processed DataFrame
+        """
+
+    def write_results(self, df: pl.DataFrame) -> None:
+        """Write results to S3 using PyArrow."""
+
+class OptimizationDemo:
+    """Demonstrates optimization techniques."""
+
+    @staticmethod
+    def demonstrate_predicate_pushdown() -> None:
+        """Show how DuckDB filters at storage layer."""
+
+    @staticmethod
+    def demonstrate_projection_pushdown() -> None:
+        """Show how DuckDB reads only required columns."""
+
+    @staticmethod
+    def demonstrate_zero_copy() -> None:
+        """Show zero-copy handoff from DuckDB to Polars."""
+
+    @staticmethod
+    def demonstrate_streaming() -> None:
+        """Show Polars streaming mode for out-of-core processing."""
+```
+
+**Optimization Techniques**:
+
+1. **Predicate Pushdown**:
+```python
+# DuckDB applies filters at Parquet file level
+query = """
+SELECT * FROM read_parquet('s3://bucket/lineitem/**/*.parquet')
+WHERE l_shipdate > '1995-03-15'
+"""
+# Only reads Parquet row groups matching the predicate
+```
+
+2. **Projection Pushdown**:
+```python
+# DuckDB reads only required columns
+query = """
+SELECT l_orderkey, l_extendedprice, l_discount
+FROM read_parquet('s3://bucket/lineitem/**/*.parquet')
+"""
+# Skips reading unused columns, reducing I/O
+```
+
+3. **Zero-Copy Handoff**:
+```python
+# Transfer from DuckDB to Polars without serialization
+duckdb_rel = conn.execute(query)
+polars_df = duckdb_rel.pl()  # Zero-copy via Arrow
+```
+
+4. **Streaming Mode**:
+```python
+# Process 100GB dataset with 16GB RAM
+result = (
+    pl.scan_parquet('s3://bucket/lineitem/**/*.parquet')
+    .filter(pl.col('l_shipdate') > '1995-03-15')
+    .group_by('l_orderkey')
+    .agg(pl.sum('revenue'))
+    .collect(streaming=True)  # Out-of-core processing
+)
+```
+
+**AWS Batch Configuration**:
+- Fargate launch type (serverless)
+- Configurable vCPU (4, 8, 16) and memory (16GB, 32GB, 64GB)
+- IAM role for S3 access
+- CloudWatch Logs integration
+
+### Component 4: Multi-Job Orchestrator
+
+**Purpose**: Stress-test both systems with concurrent job execution to measure startup latency.
+
+**Technology Stack**: Python, boto3
+
+**Key Classes**:
+
+```python
+class JobOrchestrator:
+    """Orchestrates concurrent job execution on EKS and AWS Batch."""
+
+    def __init__(self, eks_cluster: str, batch_job_queue: str):
+        """
+        Initialize orchestrator.
+
+        Args:
+            eks_cluster: EKS cluster name
+            batch_job_queue: AWS Batch job queue name
+        """
+
+    def submit_spark_jobs(self, count: int) -> List[JobSubmission]:
+        """
+        Submit multiple Spark jobs to EKS.
+
+        Args:
+            count: Number of jobs to submit
+
+        Returns:
+            List of job submissions with timestamps
+        """
+
+    def submit_batch_jobs(self, count: int) -> List[JobSubmission]:
+        """
+        Submit multiple Polars jobs to AWS Batch.
+
+        Args:
+            count: Number of jobs to submit
+
+        Returns:
+            List of job submissions with timestamps
+        """
+
+    def monitor_jobs(self, submissions: List[JobSubmission]) -> List[JobMetrics]:
+        """
+        Monitor job execution and collect metrics.
+
+        Args:
+            submissions: List of submitted jobs
+
+        Returns:
+            List of job metrics including startup latency
+        """
+
 @dataclass
-class NYCTaxiDataset:
-    name: str
-    time_range: str
-    file_count: int
-    approx_size_gb: float
-    approx_records: int
+class JobSubmission:
+    """Represents a submitted job."""
+    job_id: str
+    job_type: str  # 'spark' or 'polars'
+    created_at: datetime
 
-# Benchmark datasets
-DATASETS = [
-    NYCTaxiDataset("tiny", "2022-01 (1 month)", 1, 0.1, 3_000_000),
-    NYCTaxiDataset("small", "2022 (1 year)", 12, 1.2, 40_000_000),
-    NYCTaxiDataset("medium", "2020-2022 (3 years)", 36, 4.0, 120_000_000),
-    NYCTaxiDataset("large", "2018-2022 (5 years)", 60, 10.0, 200_000_000),
-    NYCTaxiDataset("xlarge", "2015-2022 (8 years)", 96, 50.0, 500_000_000),
-    NYCTaxiDataset("xxlarge", "2009-2022 (14 years)", 168, 100.0, 1_000_000_000),
-]
-```
-
-**Key Insight**: No data generation or upload needed - read directly from public bucket!
-
-### Resource Monitoring System
-
-**Purpose**: Comprehensive resource usage tracking across different deployment environments.
-
-**Monitoring Capabilities**:
-- **Container Metrics**: CPU usage, memory consumption, I/O statistics
-- **Kubernetes Metrics**: Pod resource usage, node utilization, network traffic
-- **Application Metrics**: Processing throughput, query execution times, error rates
-- **Infrastructure Metrics**: Storage I/O, network latency, service response times
-
-**Metrics Collection**:
-```python
 @dataclass
-class PerformanceMetrics:
-    execution_time: float
-    startup_time: float
-    peak_memory_mb: float
-    avg_cpu_percent: float
-    disk_io_mb: float
-    network_io_mb: float
-    throughput_records_per_sec: float
-    error_count: int
+class JobMetrics:
+    """Metrics for a completed job."""
+    job_id: str
+    job_type: str
+    created_at: datetime
+    started_at: datetime
+    completed_at: datetime
+    startup_latency_seconds: float
+    execution_time_seconds: float
+    peak_memory_mb: int
 ```
 
-### Results Analysis Engine
+**Orchestration Flow**:
+1. Submit 10 Spark jobs to EKS via Kubernetes API
+2. Submit 10 Polars jobs to AWS Batch via boto3
+3. Poll job status every 5 seconds
+4. Record timestamps: created, started, completed
+5. Calculate startup latency: started - created
+6. Aggregate metrics across all jobs
 
-**Purpose**: Generate comprehensive analysis and recommendations from benchmark results.
+### Component 5: Analysis Dashboard
 
-**Analysis Features**:
-- **Performance Comparison**: Side-by-side metrics comparison with statistical significance testing
-- **Cost Analysis**: Infrastructure cost projections based on resource usage
-- **Scalability Analysis**: Performance characteristics across different data sizes
-- **Decision Framework**: Automated recommendations based on workload characteristics
+**Purpose**: Parse metrics and generate comparison reports with cost analysis.
+
+**Technology Stack**: Python, pandas, boto3
+
+**Key Classes**:
+
+```python
+class MetricsAnalyzer:
+    """Analyzes benchmark metrics and generates reports."""
+
+    def __init__(self, s3_metrics_path: str):
+        """
+        Initialize analyzer.
+
+        Args:
+            s3_metrics_path: S3 path containing metrics JSON files
+        """
+
+    def load_metrics(self) -> pd.DataFrame:
+        """Load all metrics from S3 into DataFrame."""
+
+    def calculate_statistics(self) -> Dict[str, Any]:
+        """Calculate mean, median, p95 for all metrics."""
+
+    def calculate_costs(self, pricing: PricingConfig) -> Dict[str, float]:
+        """
+        Calculate costs based on AWS pricing.
+
+        Args:
+            pricing: AWS pricing configuration
+
+        Returns:
+            Cost breakdown for each approach
+        """
+
+    def generate_markdown_report(self, output_path: str) -> None:
+        """Generate Markdown comparison table."""
+
+    def generate_cost_comparison(self, output_path: str) -> None:
+        """Generate cost analysis report."""
+
+@dataclass
+class PricingConfig:
+    """AWS pricing configuration."""
+    eks_control_plane_hourly: float = 0.10
+    eks_node_vcpu_hourly: float = 0.0416  # m5.xlarge
+    batch_fargate_vcpu_hourly: float = 0.04048
+    batch_fargate_memory_gb_hourly: float = 0.004445
+    s3_request_per_1000: float = 0.0004
+```
+
+**Report Format**:
+
+```markdown
+# Benchmark Comparison Report
+
+## Performance Metrics
+
+| Metric | PySpark (EKS) | Polars (Batch) | Winner |
+|--------|---------------|----------------|--------|
+| Execution Time (mean) | 245s | 187s | Polars |
+| Startup Latency (mean) | 45s | 8s | Polars |
+| Peak Memory (mean) | 12GB | 8GB | Polars |
+| Bytes Read | 10.2GB | 10.2GB | Tie |
+
+## Cost Analysis
+
+| Component | PySpark (EKS) | Polars (Batch) |
+|-----------|---------------|----------------|
+| Compute Cost | $2.45 | $0.87 |
+| S3 Requests | $0.02 | $0.02 |
+| **Total** | **$2.47** | **$0.89** |
+| **Cost per GB** | **$0.242** | **$0.087** |
+
+## Startup Latency Analysis
+
+**PySpark on EKS**:
+- Mean: 45s
+- Median: 43s
+- P95: 62s
+
+**Polars on AWS Batch**:
+- Mean: 8s
+- Median: 7s
+- P95: 12s
+
+**Conclusion**: AWS Batch has 5.6x faster startup time.
+```
 
 ## Data Models
 
-### Benchmark Configuration
+### TPC-H Schema
+
+The system uses standard TPC-H schema with 8 tables:
+
+**Customer** (150K rows at SF=10):
+- c_custkey (PK)
+- c_name, c_address, c_nationkey (FK), c_phone
+- c_acctbal, c_mktsegment, c_comment
+
+**Orders** (1.5M rows at SF=10):
+- o_orderkey (PK)
+- o_custkey (FK), o_orderstatus, o_totalprice
+- o_orderdate, o_orderpriority, o_clerk, o_shippriority, o_comment
+
+**Lineitem** (6M rows at SF=10, **partitioned by l_shipdate**):
+- l_orderkey (FK), l_partkey (FK), l_suppkey (FK), l_linenumber (PK)
+- l_quantity, l_extendedprice, l_discount, l_tax
+- l_returnflag, l_linestatus, l_shipdate, l_commitdate, l_receiptdate
+- l_shipinstruct, l_shipmode, l_comment
+
+**Part** (200K rows at SF=10):
+- p_partkey (PK)
+- p_name, p_mfgr, p_brand, p_type, p_size, p_container
+- p_retailprice, p_comment
+
+**Supplier** (10K rows at SF=10):
+- s_suppkey (PK)
+- s_name, s_address, s_nationkey (FK), s_phone
+- s_acctbal, s_comment
+
+**Partsupp** (800K rows at SF=10):
+- ps_partkey (FK), ps_suppkey (FK) (composite PK)
+- ps_availqty, ps_supplycost, ps_comment
+
+**Nation** (25 rows):
+- n_nationkey (PK)
+- n_name, n_regionkey (FK), n_comment
+
+**Region** (5 rows):
+- r_regionkey (PK)
+- r_name, r_comment
+
+### Metrics Data Model
 
 ```python
 @dataclass
-class BenchmarkConfig:
-    test_scenarios: List[TestScenario]
-    deployment_targets: List[DeploymentTarget]
-    data_sizes: List[DataSize]
-    repetitions: int
-    timeout_minutes: int
-    resource_limits: ResourceLimits
+class JobMetrics:
+    """Complete metrics for a single job execution."""
+    job_id: str
+    job_type: str  # 'spark' or 'polars'
+    scale_factor: int  # 10 or 100
 
-@dataclass
-class TestScenario:
-    name: str
-    etl_operations: List[ETLOperation]
-    data_characteristics: DataCharacteristics
-    validation_rules: List[ValidationRule]
+    # Timestamps
+    created_at: datetime
+    started_at: datetime
+    completed_at: datetime
+
+    # Performance
+    startup_latency_seconds: float
+    execution_time_seconds: float
+    peak_memory_mb: int
+
+    # I/O
+    bytes_read: int
+    bytes_written: int
+    s3_requests: int
+
+    # Resources
+    vcpu_count: int
+    memory_gb: int
+
+    # Cost (calculated)
+    compute_cost_usd: float
+    s3_cost_usd: float
+    total_cost_usd: float
 ```
 
-### ETL Processing Models
-
-```python
-@dataclass
-class ETLOperation:
-    operation_type: OperationType  # filter, aggregate, join, transform
-    complexity: ComplexityLevel
-    selectivity: float  # Percentage of data retained after operation
-    parameters: Dict[str, Any]
-
-@dataclass
-class ProcessingResult:
-    output_path: str
-    record_count: int
-    processing_time: float
-    validation_status: ValidationStatus
-    metrics: ProcessingMetrics
-```
-
-### Results and Reporting Models
-
-```python
-@dataclass
-class BenchmarkResults:
-    test_id: str
-    timestamp: datetime
-    configuration: BenchmarkConfig
-    stack_results: Dict[str, StackResult]
-    comparative_analysis: ComparativeAnalysis
-    recommendations: List[Recommendation]
-
-@dataclass
-class StackResult:
-    stack_name: str
-    execution_results: List[ExecutionResult]
-    aggregated_metrics: AggregatedMetrics
-    resource_efficiency: ResourceEfficiency
-```
 
 ## Correctness Properties
 
-*A property is a characteristic or behavior that should hold true across all valid executions of a system-essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
+*A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-### Property 1: Cross-region detection triggers localization
+### Property 1: TPC-H Table Generation Completeness
 
-*For any* source data region and compute region pair, when they differ, the system should initiate data localization before benchmarking.
-**Validates: Requirements 9.1**
+*For any* TPC-H scale factor, generating data should produce all 8 standard TPC-H tables (customer, lineitem, nation, orders, part, partsupp, region, supplier) with schemas matching the TPC-H specification.
 
-### Property 2: Dataset size maps to correct time range
+**Validates: Requirements 1.1**
 
-*For any* dataset size request (small, medium, large), the system should copy the correct time range: small → 1 month, medium → 1 year, large → 5 years.
-**Validates: Requirements 9.3**
+### Property 2: Parquet Output to S3
 
-### Property 3: Configuration updates after localization
+*For any* generated TPC-H table, the output should be valid Parquet files stored in S3 at the specified bucket and prefix.
 
-*For any* completed data localization operation, the system configuration should point to the local bucket in the target region.
+**Validates: Requirements 1.2**
+
+### Property 3: Lineitem Partitioning Structure
+
+*For any* generated lineitem table, the S3 structure should follow Hive-style partitioning with year=YYYY/month=MM directories extracted from l_shipdate.
+
+**Validates: Requirements 1.3, 9.1, 9.3**
+
+### Property 4: Scale Factor Support
+
+*For any* scale factor configuration (10 or 100), the generated dataset size should be approximately scale_factor × 1GB for the complete TPC-H dataset.
+
+**Validates: Requirements 1.4**
+
+### Property 5: Generation Progress Logging
+
+*For any* table generation operation, the system should emit log messages indicating progress and completion time.
+
+**Validates: Requirements 1.5**
+
+### Property 6: Query Result Equivalence
+
+*For any* TPC-H query execution, both PySpark and Polars implementations should produce identical results (same rows, same aggregations) when given the same input data.
+
+**Validates: Requirements 2.2**
+
+### Property 7: Complete Metrics Collection
+
+*For any* job execution (Spark or Polars), the system should record all required metrics: startup time, execution time, peak memory, bytes read, and bytes written.
+
+**Validates: Requirements 2.3, 3.6, 8.1, 8.2, 8.3, 8.4**
+
+### Property 8: Metrics Persistence
+
+*For any* completed job, metrics should be written to S3 as a valid JSON file with all required fields populated.
+
+**Validates: Requirements 8.5**
+
+### Property 9: Predicate Pushdown Efficiency
+
+*For any* query with filter predicates, DuckDB should read fewer bytes from S3 compared to reading all data and then filtering in memory.
+
+**Validates: Requirements 3.2, 9.5**
+
+### Property 10: Projection Pushdown Efficiency
+
+*For any* query selecting specific columns, DuckDB should read fewer bytes from S3 compared to SELECT * followed by column selection.
+
+**Validates: Requirements 3.3**
+
+### Property 11: Partition Pruning Efficiency
+
+*For any* query filtering by date on the lineitem table, both implementations should read only the relevant partitions (not all partitions).
+
 **Validates: Requirements 9.4**
 
-### Property 4: Region consistency during benchmarks
+### Property 12: Concurrent Job Submission
 
-*For any* benchmark execution, the data source region should match the compute resource region.
-**Validates: Requirements 9.5**
+*For any* orchestration run, the system should successfully submit exactly 10 Spark jobs and exactly 10 Polars jobs.
+
+**Validates: Requirements 4.1, 4.2**
+
+### Property 13: Timestamp Recording
+
+*For any* submitted job, the system should record both "Job Created" and "Job Started" timestamps.
+
+**Validates: Requirements 4.3**
+
+### Property 14: Startup Latency Calculation
+
+*For any* job with recorded timestamps, the startup latency should be calculated as (started_at - created_at) and should be a non-negative value.
+
+**Validates: Requirements 4.4**
+
+### Property 15: Complete Metrics Collection from All Jobs
+
+*For any* orchestration run with 20 jobs (10 Spark + 10 Polars), the system should collect execution metrics from all 20 jobs.
+
+**Validates: Requirements 4.5**
+
+### Property 16: Metrics Extraction from Logs
+
+*For any* set of job logs, the analysis system should successfully extract execution time, memory usage, and startup latency for each job.
+
+**Validates: Requirements 5.1**
+
+### Property 17: Markdown Report Generation
+
+*For any* completed benchmark run, the system should generate a Markdown file containing a comparison table with metrics for both Spark and Polars.
+
+**Validates: Requirements 5.2**
+
+### Property 18: Cost Calculation Accuracy
+
+*For any* job execution, the calculated cost should use the correct AWS pricing formulas: (vCPU × hours × vCPU_rate) + (memory_GB × hours × memory_rate) for Batch, and (node_count × hours × node_rate) + control_plane_cost for EKS.
+
+**Validates: Requirements 5.3**
+
+### Property 19: Cost Metrics in Report
+
+*For any* generated report, it should include both cost-per-GB-processed and total cost for each approach.
+
+**Validates: Requirements 5.4**
+
+### Property 20: Startup Latency Comparison
+
+*For any* generated report, it should include a comparison of startup latency between EKS and Batch approaches.
+
+**Validates: Requirements 5.5**
+
+### Property 21: Type Hint Coverage
+
+*For any* Python function in the codebase, it should have type hints for all parameters and return values.
+
+**Validates: Requirements 6.1**
+
+### Property 22: Exception Handling Coverage
+
+*For any* external operation (S3 access, API calls, file I/O), the code should include try/except blocks with appropriate error logging.
+
+**Validates: Requirements 6.3**
+
+### Property 23: Docstring Coverage
+
+*For any* public function or class, it should have a docstring describing its purpose, parameters, and return value.
+
+**Validates: Requirements 6.4**
+
+### Property 24: Environment Variable Configuration
+
+*For any* AWS resource access (S3 buckets, EKS cluster, Batch queue), the configuration should come from environment variables, not hardcoded values.
+
+**Validates: Requirements 6.5, 7.1, 7.2, 7.3, 7.4**
+
+### Property 25: Parquet Compression
+
+*For any* generated Parquet file, it should use either Snappy or Zstd compression (not uncompressed).
+
+**Validates: Requirements 9.2**
+
+### Property 26: Summary Report Generation
+
+*For any* completed benchmark run, the system should generate a summary report with key findings and recommendations.
+
+**Validates: Requirements 10.4**
+
+### Property 27: Debug Logging Control
+
+*For any* execution, setting the DEBUG environment variable to "true" should enable verbose logging, while any other value should use standard logging.
+
+**Validates: Requirements 10.5**
 
 ## Error Handling
 
-### Error Categories and Strategies
+### Error Categories
 
-**Infrastructure Errors**:
-- **Container Startup Failures**: Retry with exponential backoff, fallback to alternative images
-- **Resource Exhaustion**: Automatic resource scaling, graceful degradation
-- **Network Connectivity**: Circuit breaker pattern, offline mode support
+1. **Data Generation Errors**:
+   - DuckDB TPC-H extension not available
+   - S3 write permissions denied
+   - Insufficient disk space for temporary files
+   - Invalid scale factor specified
 
-**Data Processing Errors**:
-- **Data Corruption**: Checksum validation, automatic data regeneration
-- **Schema Mismatches**: Schema evolution handling, backward compatibility checks
-- **Processing Timeouts**: Configurable timeout handling, partial result preservation
+2. **Job Execution Errors**:
+   - S3 read permissions denied
+   - Out of memory during processing
+   - Invalid query syntax
+   - Missing input tables
 
-**Benchmark Framework Errors**:
-- **Metric Collection Failures**: Fallback to basic metrics, error reporting
-- **Result Aggregation Errors**: Partial result handling, data integrity checks
-- **Report Generation Failures**: Alternative output formats, raw data export
+3. **Orchestration Errors**:
+   - EKS cluster not accessible
+   - AWS Batch queue not found
+   - Job submission rate limits exceeded
+   - Authentication failures
 
-### Error Recovery Mechanisms
+4. **Analysis Errors**:
+   - Metrics files not found in S3
+   - Invalid JSON format in metrics
+   - Missing required metrics fields
+   - Cost calculation errors
 
-```python
-class ErrorHandler:
-    def handle_infrastructure_error(self, error: InfrastructureError) -> RecoveryAction
-    def handle_processing_error(self, error: ProcessingError) -> RecoveryAction
-    def handle_benchmark_error(self, error: BenchmarkError) -> RecoveryAction
+### Error Handling Strategy
 
-    def retry_with_backoff(self, operation: Callable, max_retries: int) -> Result
-    def fallback_to_alternative(self, primary_option: Option, fallback: Option) -> Result
-```
+**Retry Logic**:
+- S3 operations: Retry up to 3 times with exponential backoff
+- Job submissions: Retry up to 2 times with 5-second delay
+- API calls: Use boto3 default retry configuration
+
+**Graceful Degradation**:
+- If some jobs fail, continue with successful jobs for analysis
+- If metrics are incomplete, report available metrics with warnings
+- If cost calculation fails, report performance metrics only
+
+**Error Logging**:
+- All errors logged to CloudWatch Logs with full stack traces
+- Critical errors also written to S3 for post-mortem analysis
+- User-friendly error messages for common issues
+
+**Validation**:
+- Validate environment variables at startup
+- Validate S3 paths before job submission
+- Validate metrics JSON schema before analysis
 
 ## Testing Strategy
 
-### Property-Based Testing
-
-**Testing Framework**: Hypothesis (Python property-based testing library)
-
-**Configuration**: Each property-based test will run a minimum of 100 iterations to ensure statistical confidence.
-
-**Property Tests for Data Localization**:
-
-1. **Property 1: Cross-region detection** - Generate random region pairs and verify localization triggers when regions differ
-2. **Property 2: Dataset size mapping** - Generate random dataset size requests and verify correct time range selection
-3. **Property 3: Configuration updates** - Generate random localization scenarios and verify configuration updates
-4. **Property 4: Region consistency** - Generate random benchmark configurations and verify region matching
-
-**Test Tagging**: Each property-based test will include a comment explicitly referencing the correctness property:
-```python
-# Feature: pythonic-etl-benchmark, Property 1: Cross-region detection triggers localization
-@given(source_region=regions(), compute_region=regions())
-def test_cross_region_detection(source_region, compute_region):
-    ...
-```
+This POC uses a **dual testing approach** combining unit tests for specific scenarios and property-based tests for comprehensive coverage.
 
 ### Unit Testing
 
-**ETL Logic Testing**:
-- **Data Transformation Validation**: Verify identical output between Spark and Pythonic implementations
-- **Edge Case Handling**: Null values, empty datasets, malformed data
-- **Performance Regression**: Automated performance baseline comparison
+Unit tests focus on:
+- **Specific examples**: Verify TPC-H Query 3 produces expected results for known input
+- **Edge cases**: Empty datasets, single-row tables, null values
+- **Error conditions**: Missing S3 buckets, invalid credentials, malformed data
+- **Integration points**: DuckDB to Polars handoff, boto3 API calls
 
-**Framework Testing**:
-- **Metric Collection Accuracy**: Validate resource monitoring precision
-- **Configuration Validation**: Test parameter validation and error handling
-- **Result Aggregation**: Verify statistical calculations and report generation
-
-**Data Localization Testing**:
-- **S3 Copy Verification**: Verify files are copied correctly to local bucket
-- **Configuration Update**: Verify config points to correct bucket after localization
-- **Error Handling**: Test behavior when source bucket is inaccessible
-
-### Integration Testing
-
-**End-to-End Pipeline Testing**:
-- **Multi-Environment Deployment**: Validate deployment across Docker, Kubernetes, AWS
-- **Data Flow Validation**: Verify data integrity through complete pipeline
-- **Resource Monitoring Integration**: Test metric collection across all environments
-
-**Infrastructure Testing**:
-- **Service Dependencies**: Test Iceberg catalog, MinIO, PostgreSQL integration
-- **Network Resilience**: Simulate network failures and recovery
-- **Scaling Behavior**: Test horizontal and vertical scaling scenarios
-
-### Performance Testing
-
-**Benchmark Validation**:
-- **Measurement Accuracy**: Validate timing precision and resource monitoring accuracy
-- **Reproducibility**: Ensure consistent results across multiple runs
-- **Statistical Significance**: Verify benchmark results meet statistical confidence thresholds
-
-**Load Testing**:
-- **Data Scale Testing**: Validate performance across different data sizes
-- **Concurrent Execution**: Test multiple benchmark runs simultaneously
-- **Resource Saturation**: Test behavior under resource constraints
-
-### Acceptance Testing
-
-**Business Scenario Validation**:
-- **Real-World Workloads**: Test with production-like data patterns and volumes
-- **Decision Framework Accuracy**: Validate recommendations against known optimal choices
-- **Report Quality**: Verify report completeness and actionability
-
-**User Experience Testing**:
-- **Configuration Simplicity**: Test ease of benchmark setup and execution
-- **Result Interpretation**: Validate clarity and usefulness of generated reports
-- **Documentation Completeness**: Verify reproducibility from documentation alone
-
-### Test Data Management
-
-**Synthetic Data Generation**:
-- **Realistic Patterns**: Generate data that mimics production characteristics
-- **Scalable Generation**: Support for generating datasets from MB to GB scale
-- **Deterministic Generation**: Ensure reproducible test data across runs
-
-**Test Environment Management**:
-- **Environment Isolation**: Ensure tests don't interfere with each other
-- **Resource Cleanup**: Automatic cleanup of test artifacts and resources
-- **Configuration Management**: Maintain test configurations and baselines
-
-## AWS EKS Deployment Design
-
-### Infrastructure as Code
-
-**Terraform Modules**:
-```hcl
-# EKS Cluster with node groups
-module "eks" {
-  cluster_name = "etl-benchmark-cluster"
-  node_groups = {
-    spark_workers: r6i.2xlarge (8 vCPU, 64GB)
-    polars_workers: r6i.8xlarge (32 vCPU, 256GB)
-  }
-}
-
-# S3 Bucket for data storage
-module "s3" {
-  bucket_name = "etl-benchmark-data-${account_id}"
-  versioning = enabled
-  lifecycle_rules = intelligent_tiering
-}
-
-# ECR Repository for container images
-module "ecr" {
-  repositories = ["spark-etl", "polars-etl"]
-  image_scanning = enabled
-}
-```
-
-### Spark Operator Configuration with Pod Identity
-
-**EKS Pod Identity Association** (Simpler than IRSA):
-```hcl
-# Terraform configuration
-resource "aws_eks_pod_identity_association" "spark" {
-  cluster_name    = module.eks.cluster_name
-  namespace       = "default"
-  service_account = "spark-sa"
-  role_arn        = aws_iam_role.spark_pods.arn
-}
-```
-
-**Benefits over IRSA**:
-- No OIDC provider configuration needed
-- No ServiceAccount annotations required
-- Simpler IAM trust policy
-- Better security isolation
-- Easier to manage at scale
-
-**SparkApplication CRD**:
-```yaml
-apiVersion: sparkoperator.k8s.io/v1beta2
-kind: SparkApplication
-metadata:
-  name: spark-etl-benchmark
-spec:
-  type: Python
-  mode: cluster
-  image: ${ECR_REPO}/spark-etl:${VERSION}
-  mainApplicationFile: local:///app/src/etl/spark_etl_nyc_taxi.py
-
-  sparkConf:
-    spark.hadoop.fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
-    # Pod Identity handles credentials automatically
-    spark.hadoop.fs.s3a.aws.credentials.provider: com.amazonaws.auth.WebIdentityTokenCredentialsProvider
-
-  driver:
-    cores: 2
-    memory: "4g"
-    serviceAccount: spark-sa  # Associated with IAM role via Pod Identity
-
-  executor:
-    cores: 4
-    memory: "8g"
-    instances: 3
-```
-
-### NYC Taxi Data Localization Strategy
-
-**Problem**: The NYC Taxi public dataset is in `s3://nyc-tlc/trip data/` (us-east-1), but our compute resources are in eu-central-1. Cross-region data access causes:
-1. **Network Latency**: Streaming gigabytes across the Atlantic introduces jitter and unstable benchmark results
-2. **Data Transfer Costs**: AWS charges $0.02/GB for cross-region transfer out of us-east-1
-3. **Performance Measurement**: Benchmarks would measure internet speed, not Spark/Polars performance
-
-**Solution**: "Copy Once, Read Locally" - Use EC2 instance to perform one-time S3-to-S3 copy within AWS backbone.
-
-**Data Localization Architecture**:
-```mermaid
-graph LR
-    subgraph "us-east-1"
-        SOURCE[NYC TLC Public Bucket<br/>s3://nyc-tlc/trip data/]
-    end
-
-    subgraph "eu-central-1"
-        EC2[EC2 Instance<br/>High Bandwidth]
-        LOCAL[Local S3 Bucket<br/>s3://etl-benchmark-data-*/nyc-taxi/]
-        POLARS[Polars ETL]
-        SPARK[Spark ETL]
-    end
-
-    SOURCE -->|One-time copy<br/>S3-to-S3| EC2
-    EC2 -->|Write| LOCAL
-    LOCAL -->|Read| POLARS
-    LOCAL -->|Read| SPARK
-```
-
-**Implementation Strategy**:
-
-1. **Use Your Existing Bucket** (eu-central-1):
-```bash
-# Bucket already exists: s3://ccorsetti
-# Create subdirectory structure for NYC Taxi data
-```
-
-2. **Use EC2 for Transfer** (10-25 Gbps network bandwidth):
-```bash
-# SSH into EC2 instance (r6g.2xlarge or similar)
-
-# SMALL DATASET (~40MB, 1 month)
-aws s3 cp \
-  s3://nyc-tlc/trip\ data/yellow_tripdata_2022-01.parquet \
-  s3://ccorsetti/nyc-taxi/small/ \
-  --source-region us-east-1 \
-  --region eu-central-1
-
-# MEDIUM DATASET (~1.2GB, 1 year)
-aws s3 sync \
-  s3://nyc-tlc/trip\ data/ \
-  s3://ccorsetti/nyc-taxi/medium/ \
-  --exclude "*" \
-  --include "yellow_tripdata_2022-*.parquet" \
-  --source-region us-east-1 \
-  --region eu-central-1
-
-# LARGE DATASET (~10GB, 5 years)
-for year in {2018..2022}; do
-  aws s3 sync \
-    s3://nyc-tlc/trip\ data/ \
-    s3://ccorsetti/nyc-taxi/large/ \
-    --exclude "*" \
-    --include "yellow_tripdata_${year}-*.parquet" \
-    --source-region us-east-1 \
-    --region eu-central-1
-done
-```
-
-3. **Update Configuration** to read from local bucket:
+**Example Unit Tests**:
 ```python
-# Before (cross-region)
-INPUT_PATH = "s3://nyc-tlc/trip data/"
+def test_tpch_generator_creates_customer_table():
+    """Verify customer table is generated with correct schema."""
 
-# After (localized)
-INPUT_PATH = f"s3://ccorsetti/nyc-taxi/{size}/"
+def test_spark_job_handles_missing_table():
+    """Verify Spark job raises appropriate error for missing table."""
+
+def test_polars_streaming_mode_enabled():
+    """Verify Polars uses streaming mode for large datasets."""
+
+def test_cost_calculator_handles_zero_duration():
+    """Verify cost calculation handles edge case of zero execution time."""
 ```
 
-**Benefits**:
-- **Stability**: Consistent read times, scientific benchmarks
-- **Cost**: Pay transfer fee once (~$0.02/GB), subsequent reads are free within region
-- **Speed**: S3-to-EC2 bandwidth within region is massive (up to 100 Gbps)
-- **Fair Comparison**: Both Polars and Spark read from same local source
+### Property-Based Testing
 
-**Cost Analysis**:
+Property tests verify universal properties across randomized inputs using **Hypothesis** (Python property-based testing library).
+
+**Configuration**:
+- Minimum 100 iterations per property test
+- Each test tagged with feature name and property number
+- Tag format: `# Feature: pythonic-etl-benchmark, Property N: [property text]`
+
+**Example Property Tests**:
+
 ```python
-# One-time transfer cost
-small_transfer = 0.04 GB × $0.02 = $0.0008
-medium_transfer = 1.2 GB × $0.02 = $0.024
-large_transfer = 10 GB × $0.02 = $0.20
+from hypothesis import given, strategies as st
 
-# Savings per benchmark run (avoiding cross-region reads)
-# Multiple runs × multiple tests = significant savings
-```
+@given(scale_factor=st.integers(min_value=1, max_value=100))
+def test_property_4_scale_factor_support(scale_factor):
+    """
+    Feature: pythonic-etl-benchmark, Property 4: Scale Factor Support
 
-**Input Data** (After localization):
-```
-s3://ccorsetti/nyc-taxi/
-├── small/
-│   └── yellow_tripdata_2022-01.parquet  # ~40MB, 3M records
-├── medium/
-│   └── yellow_tripdata_2022-*.parquet   # ~1.2GB, 40M records (12 files)
-└── large/
-    └── yellow_tripdata_{2018-2022}-*.parquet  # ~10GB, 200M records (60 files)
-```
+    For any scale factor, generated dataset size should be approximately
+    scale_factor × 1GB.
+    """
+    generator = TPCHGenerator(scale_factor, bucket, prefix)
+    generator.generate_all_tables()
 
-**Output Data** (Benchmark results):
-```
-s3://ccorsetti/benchmark-results/
-├── polars/
-│   ├── small/
-│   │   ├── results.parquet
-│   │   └── metrics.json
-│   ├── medium/
-│   └── large/
-└── spark/
-    ├── small/
-    ├── medium/
-    └── large/
-```
+    total_size = get_s3_total_size(bucket, prefix)
+    expected_size = scale_factor * 1e9  # 1GB in bytes
 
-### Cost Tracking and Optimization
+    # Allow 20% variance due to compression and data characteristics
+    assert 0.8 * expected_size <= total_size <= 1.2 * expected_size
 
-**EC2 Cost Model (Polars)**:
-```python
-ec2_cost = (instance_hourly_rate × execution_hours) + s3_requests_cost
-# Example: r6i.2xlarge = $0.504/hr in us-east-1
-# 10GB processing in 5 minutes = $0.042 + $0.001 S3 = $0.043 total
-```
-
-**EKS Cost Model (Spark)**:
-```python
-eks_cost = (
-    (control_plane_cost × hours) +  # $0.10/hr
-    (node_costs × hours) +           # Multiple nodes
-    (s3_requests_cost)
+@given(
+    filter_date=st.dates(min_value=date(1992, 1, 1), max_value=date(1998, 12, 31))
 )
-# Example: 3 nodes × $0.504/hr × 0.5hr = $0.756 + $0.05 control + $0.002 S3 = $0.808
+def test_property_9_predicate_pushdown_efficiency(filter_date):
+    """
+    Feature: pythonic-etl-benchmark, Property 9: Predicate Pushdown Efficiency
+
+    For any filter date, DuckDB should read fewer bytes with predicate pushdown
+    than reading all data then filtering.
+    """
+    # Query with pushdown
+    bytes_with_pushdown = measure_bytes_read(
+        f"SELECT * FROM lineitem WHERE l_shipdate > '{filter_date}'"
+    )
+
+    # Query without pushdown (read all, then filter)
+    bytes_without_pushdown = measure_bytes_read(
+        "SELECT * FROM lineitem"
+    )
+
+    assert bytes_with_pushdown < bytes_without_pushdown
+
+@given(
+    columns=st.lists(
+        st.sampled_from(['l_orderkey', 'l_extendedprice', 'l_discount', 'l_quantity']),
+        min_size=1,
+        max_size=4,
+        unique=True
+    )
+)
+def test_property_10_projection_pushdown_efficiency(columns):
+    """
+    Feature: pythonic-etl-benchmark, Property 10: Projection Pushdown Efficiency
+
+    For any column selection, DuckDB should read fewer bytes than SELECT *.
+    """
+    column_list = ', '.join(columns)
+
+    bytes_with_projection = measure_bytes_read(
+        f"SELECT {column_list} FROM lineitem LIMIT 1000"
+    )
+
+    bytes_without_projection = measure_bytes_read(
+        "SELECT * FROM lineitem LIMIT 1000"
+    )
+
+    assert bytes_with_projection <= bytes_without_projection
+
+@given(
+    job_count=st.integers(min_value=1, max_value=20)
+)
+def test_property_12_concurrent_job_submission(job_count):
+    """
+    Feature: pythonic-etl-benchmark, Property 12: Concurrent Job Submission
+
+    For any number of jobs, orchestrator should successfully submit all jobs.
+    """
+    orchestrator = JobOrchestrator(eks_cluster, batch_queue)
+
+    spark_submissions = orchestrator.submit_spark_jobs(job_count)
+    batch_submissions = orchestrator.submit_batch_jobs(job_count)
+
+    assert len(spark_submissions) == job_count
+    assert len(batch_submissions) == job_count
+    assert all(s.job_id for s in spark_submissions)
+    assert all(s.job_id for s in batch_submissions)
 ```
 
-**TCO Analysis**:
-- **Operational Overhead**: Deployment time, monitoring setup, debugging complexity
-- **Learning Curve**: Time to become proficient with each approach
-- **Maintenance**: Ongoing operational burden
+### Testing Balance
 
-**Optimization Strategies**:
-- **Graviton Instances**: r7g vs r6i = 20% cost savings
-- **Spot Instances**: 60-90% savings for non-critical workloads
-- **Right-Sizing**: Start small, scale only when needed
-- **No Data Transfer**: Reading from public bucket in same region = free
+- **Unit tests**: ~30 tests covering specific examples and edge cases
+- **Property tests**: ~15 tests covering universal properties with 100+ iterations each
+- **Integration tests**: ~5 tests covering end-to-end workflows
+
+This balance ensures:
+- Specific scenarios are validated (unit tests)
+- General correctness is verified across many inputs (property tests)
+- Real-world workflows are tested (integration tests)
+
+### Test Execution
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run only unit tests
+pytest tests/ -m "not property"
+
+# Run only property tests (with warning about long runtime)
+pytest tests/ -m property
+
+# Run with coverage
+pytest tests/ --cov=src --cov-report=html
+```
+
+### Continuous Integration
+
+- All tests run on every commit
+- Property tests run with reduced iterations (10) in CI for speed
+- Full property tests (100 iterations) run nightly
+- Test results published to S3 for tracking

@@ -2,127 +2,150 @@
 
 ## Introduction
 
-This PoC demonstrates a strategic comparison between **Vertical Scaling** (single-node processing with Polars on EC2) and **Horizontal Scaling** (distributed processing with Spark on EKS). The goal is to identify the **crossover point** where distributed processing becomes necessary, answering the critical question: "When do you actually need Spark?"
+This Senior Data Engineering POC demonstrates a strategic pivot from Spark on EKS to a Job-Native Polars/DuckDB architecture on AWS Batch. The goal is to prove that single-node, high-performance engines are more cost-effective and faster for datasets up to 100GB.
 
-The benchmark uses the **NYC Taxi Trip dataset** (publicly available on S3) to provide realistic, production-grade data at multiple scales. By comparing a simple EC2 instance running Polars against a full EKS cluster running Spark, we demonstrate:
+The benchmark uses **TPC-H standard benchmark data** to provide industry-standard, reproducible performance testing. By comparing PySpark on EKS against Polars/DuckDB on AWS Batch, we demonstrate:
 
-1. **Performance characteristics** across data sizes (1GB to 100GB+)
-2. **Infrastructure complexity** (single VM vs. Kubernetes cluster)
-3. **Total Cost of Ownership** (compute + operational overhead)
-4. **Operational simplicity** (deployment, monitoring, debugging)
+1. **Performance characteristics** for complex joins and aggregations
+2. **Infrastructure complexity** (Kubernetes cluster vs. serverless batch jobs)
+3. **Cost efficiency** (vCPU/hour for EKS nodes vs. Fargate/Batch tasks)
+4. **Startup latency** (EKS pod scheduling vs. Batch job launch)
+5. **Scalability patterns** (horizontal scaling vs. vertical scaling with out-of-core processing)
 
-This is not about proving one technology is "better" - it's about showing **when each approach is optimal** for different workload characteristics.
+This POC answers the critical question: **"When should we use single-node high-performance engines instead of distributed systems?"**
 
 ## Glossary
 
-- **Vertical Scaling**: Increasing resources (CPU, RAM) on a single machine
-- **Horizontal Scaling**: Adding more machines to distribute workload
-- **Crossover Point**: Data size where distributed processing becomes cost-effective
-- **TCO**: Total Cost of Ownership (compute + operational overhead)
-- **NYC TLC**: NYC Taxi and Limousine Commission (data provider)
-- **Data Localization**: Copying data to the same AWS region as compute resources to eliminate cross-region transfer costs and latency
-- **Cross-Region Transfer**: Data movement between AWS regions that incurs network costs and latency
+- **TPC-H**: Transaction Processing Performance Council - Decision Support Benchmark, an industry-standard benchmark for analytical workloads
+- **Scale Factor**: TPC-H parameter controlling dataset size (SF 10 = ~10GB, SF 100 = ~100GB)
+- **Predicate Pushdown**: Filtering data at the storage layer before loading into memory
+- **Projection Pushdown**: Selecting only required columns at the storage layer
+- **Zero-Copy Handoff**: Passing data between systems without serialization/deserialization overhead
+- **Out-of-Core Processing**: Processing datasets larger than available RAM using streaming techniques
+- **AWS Batch**: Managed batch computing service that runs jobs on Fargate or EC2
+- **EKS**: Amazon Elastic Kubernetes Service
+- **Startup Latency**: Time between job submission and actual execution start
 
 ## Requirements
 
-### Requirement 1
+### Requirement 1: TPC-H Synthetic Data Generation
 
-**User Story:** As a data engineer, I want to identify the crossover point where distributed processing becomes necessary, so that I can avoid over-engineering simple ETL workloads.
-
-#### Acceptance Criteria
-
-1. WHEN the benchmark runs THEN the system SHALL execute identical ETL logic on both EC2 (Polars) and EKS (Spark)
-2. WHEN processing different data volumes (1GB, 10GB, 50GB, 100GB) THEN the system SHALL measure execution time, memory usage, and infrastructure cost for each approach
-3. WHEN benchmarks complete THEN the system SHALL identify the data size where Spark becomes faster than Polars
-4. WHEN analyzing results THEN the system SHALL calculate the crossover point considering both performance and cost
-
-### Requirement 2
-
-**User Story:** As a DevOps engineer, I want to compare infrastructure complexity between single-node and distributed deployments, so that I can understand the operational overhead of each approach.
+**User Story:** As a benchmark engineer, I want to generate TPC-H standard benchmark data at scale factors 10 and 100, so that I can test performance on industry-standard datasets of 10GB and 100GB.
 
 #### Acceptance Criteria
 
-1. WHEN deploying Polars THEN the system SHALL use a single EC2 instance with no orchestration overhead
-2. WHEN deploying Spark THEN the system SHALL use EKS with Spark Operator for native Kubernetes integration
-3. WHEN measuring complexity THEN the system SHALL track deployment time, configuration steps, and monitoring requirements
-4. WHEN comparing approaches THEN the system SHALL document the operational differences (VM vs. K8s cluster management)
+1. WHEN generating data THEN the system SHALL use DuckDB to create all 8 TPC-H tables (customer, lineitem, nation, orders, part, partsupp, region, supplier)
+2. WHEN writing data THEN the system SHALL output Parquet files directly to S3 without intermediate local storage
+3. WHEN partitioning data THEN the system SHALL partition the lineitem table by l_shipdate to simulate realistic data lake scenarios
+4. WHEN configuring scale THEN the system SHALL support Scale Factor 10 (~10GB) and Scale Factor 100 (~100GB)
+5. WHEN executing generation THEN the system SHALL log progress and completion time for each table
 
-### Requirement 3
+### Requirement 2: PySpark Legacy Baseline Implementation
 
-**User Story:** As a technical writer, I want clear "Ant vs. Cannon" narratives with cost analysis, so that I can create compelling content about when to use each approach.
-
-#### Acceptance Criteria
-
-1. WHEN benchmarks complete THEN the system SHALL generate reports with the "Vertical vs. Horizontal Scaling" narrative
-2. WHEN presenting results THEN the system SHALL show cost-per-GB and cost-per-hour metrics for both approaches
-3. WHEN documenting findings THEN the system SHALL provide decision framework: "Use Polars when X, use Spark when Y"
-4. WHEN analyzing crossover point THEN the system SHALL explain why distributed processing becomes necessary at that scale
-
-### Requirement 4
-
-**User Story:** As a data platform architect, I want to use real-world production data (NYC Taxi) instead of synthetic data, so that benchmark results reflect actual workload characteristics.
+**User Story:** As a performance engineer, I want a PySpark implementation that reads TPC-H data from S3 and performs complex joins and aggregations, so that I can establish a baseline for distributed processing performance.
 
 #### Acceptance Criteria
 
-1. WHEN accessing data THEN the system SHALL read from a localized S3 bucket in eu-central-1 containing NYC Taxi data
-2. WHEN processing data THEN the system SHALL perform realistic ETL operations: filter invalid trips, calculate metrics, aggregate by location
-3. WHEN scaling tests THEN the system SHALL use actual data sizes: 1 month (~1GB), 1 year (~10GB), 5 years (~50GB), 10 years (~100GB)
-4. WHEN measuring performance THEN the system SHALL track end-to-end time including S3 read, processing, and write operations
+1. WHEN reading data THEN the PySpark job SHALL load TPC-H tables from S3 in Parquet format
+2. WHEN processing data THEN the job SHALL execute a complex query mimicking TPC-H Query 3 or Query 5 (multi-table joins with aggregations)
+3. WHEN measuring performance THEN the job SHALL track startup time (job submission to execution start), total execution time, and peak memory usage
+4. WHEN running on EKS THEN the job SHALL use the Spark Operator for native Kubernetes integration
+5. WHEN writing results THEN the job SHALL output aggregated results to S3
 
-### Requirement 5
+### Requirement 3: Polars + DuckDB Innovative Challenger Implementation
 
-**User Story:** As a developer, I want simple configuration for different data sizes and instance types, so that I can easily run benchmarks across the scaling spectrum.
-
-#### Acceptance Criteria
-
-1. WHEN configuring EC2 THEN the system SHALL support instance types: r6i.2xlarge (8 vCPU, 64GB), r6i.4xlarge (16 vCPU, 128GB)
-2. WHEN configuring Spark THEN the system SHALL support executor scaling: 2, 5, 10, 20 executors
-3. WHEN selecting data THEN the system SHALL support time ranges: 1 month, 1 year, 5 years, 10 years
-4. WHEN running tests THEN the system SHALL use consistent ETL logic across both implementations
-
-### Requirement 6
-
-**User Story:** As a cloud architect, I want to deploy Polars on EC2 and Spark on EKS to compare infrastructure approaches, so that I can demonstrate the complexity difference.
+**User Story:** As a data engineer, I want a Polars/DuckDB implementation optimized for AWS Batch that uses predicate pushdown, zero-copy handoff, and streaming mode, so that I can process 100GB datasets on machines with only 16-32GB RAM.
 
 #### Acceptance Criteria
 
-1. WHEN deploying Polars THEN the system SHALL launch a single EC2 instance with Python, Polars, and s3fs installed
-2. WHEN deploying Spark THEN the system SHALL use EKS with Spark Operator and Pod Identity Association for S3 access
-3. WHEN accessing S3 THEN the system SHALL read directly from public NYC Taxi bucket (no data upload needed)
-4. WHEN writing results THEN the system SHALL use the benchmark's own S3 bucket with appropriate permissions
-5. WHEN monitoring THEN the system SHALL track EC2 instance metrics and EKS pod metrics separately
+1. WHEN reading data THEN the system SHALL use DuckDB with httpfs extension to query S3 directly
+2. WHEN filtering data THEN the system SHALL apply predicate pushdown to filter at the storage layer
+3. WHEN selecting columns THEN the system SHALL apply projection pushdown to read only required columns
+4. WHEN transferring to Polars THEN the system SHALL use zero-copy handoff via duckdb_rel.pl()
+5. WHEN processing large datasets THEN the system SHALL use Polars streaming mode (.collect(streaming=True)) to enable out-of-core processing
+6. WHEN measuring performance THEN the system SHALL track the same metrics as PySpark (startup time, execution time, peak memory)
+7. WHEN running on AWS Batch THEN the system SHALL execute as a Fargate task with configurable vCPU and memory
 
-### Requirement 7
+### Requirement 4: Multi-Job Orchestration Stress Test
 
-**User Story:** As a cost-conscious engineer, I want detailed cost analysis showing TCO for each approach, so that I can make economically informed technology decisions.
-
-#### Acceptance Criteria
-
-1. WHEN calculating EC2 costs THEN the system SHALL include instance hourly rate × execution time
-2. WHEN calculating EKS costs THEN the system SHALL include control plane ($0.10/hr) + node costs + execution time
-3. WHEN comparing costs THEN the system SHALL show cost-per-GB-processed for both approaches
-4. WHEN analyzing TCO THEN the system SHALL include operational overhead: deployment complexity, monitoring setup, debugging time
-5. WHEN using Graviton instances THEN the system SHALL demonstrate 20% cost savings vs x86 instances
-
-### Requirement 8
-
-**User Story:** As a security engineer, I want to use EKS Pod Identity Association instead of IRSA for S3 access, so that I can simplify IAM configuration and improve security.
+**User Story:** As a DevOps engineer, I want to trigger 10 concurrent instances of both Spark and Polars jobs, so that I can measure startup latency and demonstrate EKS scheduling overhead.
 
 #### Acceptance Criteria
 
-1. WHEN configuring S3 access THEN the system SHALL use EKS Pod Identity Association instead of IRSA (IAM Roles for Service Accounts)
-2. WHEN creating IAM roles THEN the system SHALL associate them directly with EKS pods using Pod Identity
-3. WHEN Spark pods access S3 THEN the system SHALL automatically assume the correct IAM role without manual ServiceAccount annotations
-4. WHEN documenting setup THEN the system SHALL explain the benefits of Pod Identity over IRSA (simpler configuration, better security)
+1. WHEN orchestrating jobs THEN the system SHALL use boto3 to trigger 10 Spark jobs on EKS
+2. WHEN orchestrating jobs THEN the system SHALL use boto3 to trigger 10 Polars jobs on AWS Batch
+3. WHEN logging timestamps THEN the system SHALL record "Job Created" and "Job Started" times for each job
+4. WHEN calculating latency THEN the system SHALL compute the delta between job creation and execution start
+5. WHEN jobs complete THEN the system SHALL collect execution metrics from all 20 jobs (10 Spark + 10 Polars)
 
-### Requirement 9
+### Requirement 5: Comparison Dashboard and Cost Analysis
 
-**User Story:** As a performance engineer, I want to localize NYC Taxi data to eu-central-1 before running benchmarks, so that I measure compute performance rather than network latency and avoid cross-region transfer costs.
+**User Story:** As a technical leader, I want a comparison dashboard that shows performance metrics and cost estimates, so that I can make data-driven decisions about technology selection.
 
 #### Acceptance Criteria
 
-1. WHEN the source data is in us-east-1 and compute resources are in eu-central-1 THEN the system SHALL copy data to a local S3 bucket before benchmarking
-2. WHEN copying data THEN the system SHALL use EC2 instance with high network bandwidth to perform S3-to-S3 transfer within AWS backbone
-3. WHEN selecting data subsets THEN the system SHALL copy specific time ranges: 1 month for small tests, 1 year for medium tests, 5 years for large tests
-4. WHEN data localization is complete THEN the system SHALL update configuration to read from the eu-central-1 bucket
-5. WHEN benchmarks run THEN the system SHALL read data from the same region as compute resources to ensure consistent performance measurements
+1. WHEN parsing logs THEN the system SHALL extract execution time, memory usage, and startup latency from both Spark and Polars runs
+2. WHEN generating reports THEN the system SHALL create a Markdown table comparing all metrics side-by-side
+3. WHEN calculating costs THEN the system SHALL use AWS pricing for EKS nodes (vCPU/hour) and Batch Fargate tasks (vCPU/hour + memory/GB/hour)
+4. WHEN presenting results THEN the system SHALL show cost-per-GB-processed and total cost for each approach
+5. WHEN analyzing startup latency THEN the system SHALL highlight the difference in "Job Created" to "Job Started" times between EKS and Batch
+
+### Requirement 6: Clean Code and Senior-Level Quality
+
+**User Story:** As a code reviewer, I want all code to follow clean code principles suitable for a Senior POC, so that the implementation demonstrates professional engineering standards.
+
+#### Acceptance Criteria
+
+1. WHEN writing code THEN the system SHALL use type hints for all function signatures
+2. WHEN organizing code THEN the system SHALL separate concerns into modules (data generation, ETL logic, orchestration, analysis)
+3. WHEN handling errors THEN the system SHALL include proper exception handling and logging
+4. WHEN documenting code THEN the system SHALL include docstrings for all public functions
+5. WHEN configuring THEN the system SHALL use environment variables for AWS credentials and S3 bucket names
+
+### Requirement 7: AWS Infrastructure Configuration
+
+**User Story:** As a cloud engineer, I want all AWS resources to be configurable via environment variables, so that the POC can run in any AWS account without code changes.
+
+#### Acceptance Criteria
+
+1. WHEN accessing S3 THEN the system SHALL read bucket names from environment variables (S3_BUCKET_NAME)
+2. WHEN authenticating THEN the system SHALL use AWS credentials from environment variables or IAM roles
+3. WHEN configuring EKS THEN the system SHALL read cluster name from environment variables (EKS_CLUSTER_NAME)
+4. WHEN configuring Batch THEN the system SHALL read job queue and job definition from environment variables (BATCH_JOB_QUEUE, BATCH_JOB_DEFINITION)
+5. WHEN deploying THEN the system SHALL provide example .env files with all required variables
+
+### Requirement 8: Performance Measurement and Observability
+
+**User Story:** As a performance analyst, I want detailed metrics collection for both implementations, so that I can accurately compare performance characteristics.
+
+#### Acceptance Criteria
+
+1. WHEN measuring startup time THEN the system SHALL record the time from job submission to first line of code execution
+2. WHEN measuring execution time THEN the system SHALL record the time from data read start to result write completion
+3. WHEN measuring memory THEN the system SHALL track peak memory usage during execution
+4. WHEN measuring I/O THEN the system SHALL track bytes read from S3 and bytes written to S3
+5. WHEN jobs complete THEN the system SHALL write all metrics to a structured JSON file in S3
+
+### Requirement 9: Data Lake Realism
+
+**User Story:** As a data architect, I want the TPC-H data to be partitioned and stored like a real data lake, so that the benchmark reflects production scenarios.
+
+#### Acceptance Criteria
+
+1. WHEN partitioning lineitem THEN the system SHALL use Hive-style partitioning by year and month (l_shipdate)
+2. WHEN writing Parquet THEN the system SHALL use appropriate compression (snappy or zstd)
+3. WHEN organizing files THEN the system SHALL create a realistic file structure: s3://bucket/tpch/lineitem/year=1995/month=01/
+4. WHEN reading data THEN both implementations SHALL leverage partition pruning when filtering by date
+5. WHEN querying THEN the system SHALL demonstrate predicate pushdown benefits on partitioned data
+
+### Requirement 10: Reproducibility and Documentation
+
+**User Story:** As a developer, I want clear documentation and reproducible setup, so that I can run the entire POC from scratch.
+
+#### Acceptance Criteria
+
+1. WHEN setting up THEN the system SHALL provide a README with step-by-step instructions
+2. WHEN installing dependencies THEN the system SHALL use requirements.txt or pyproject.toml for Python dependencies
+3. WHEN running benchmarks THEN the system SHALL provide a single command to execute the full benchmark suite
+4. WHEN reviewing results THEN the system SHALL generate a summary report with key findings
+5. WHEN troubleshooting THEN the system SHALL include debug logging that can be enabled via environment variable

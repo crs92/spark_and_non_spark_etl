@@ -13,6 +13,8 @@ dependencies = [
     "faker",
     "matplotlib",  # For benchmark report charts
     "python-pptx",  # For PowerPoint report generation
+    "boto3",  # AWS SDK for Python
+    "hypothesis",  # Property-based testing
 ]
 
 [project.optional-dependencies]

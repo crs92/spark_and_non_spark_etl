@@ -1,424 +1,388 @@
-# Implementation Plan: Vertical vs. Horizontal Scaling Benchmark
+# Implementation Plan: TPC-H Benchmark POC
 
 ## Overview
 
-This implementation plan focuses on comparing **single-node Polars (EC2)** against **distributed Spark (EKS)** using the real-world NYC Taxi dataset. The goal is to identify the crossover point where distributed processing becomes necessary.
-
-**Key Strategy Changes:**
-- ✅ Use NYC Taxi public S3 data (no data generation needed)
-- ✅ Deploy Polars on EC2 (vertical scaling)
-- ✅ Deploy Spark on EKS (horizontal scaling)
-- ✅ Use Pod Identity Association instead of IRSA
-- ✅ Focus on cost analysis and TCO
-
----
-
-## Phase 0: Data Localization (NYC Taxi to eu-central-1)
-
-- [ ] 0. Localize NYC Taxi data to eu-central-1 for stable benchmarks
-  - Copy data from us-east-1 to local S3 bucket
-  - Update configuration to use local bucket
-  - Verify data integrity after copy
-  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
-
-- [x] 0.1 Create data localization script
-  - Write `scripts/localize_nyc_taxi_data.sh`
-  - Detect source and target regions
-  - Use EC2 instance for S3-to-S3 copy
-  - Support small, medium, large dataset sizes
-  - Add progress tracking and error handling
-  - _Requirements: 9.1, 9.2, 9.3_
-
-- [x] 0.2 Copy small dataset (1 month, ~40MB)
-  - Copy yellow_tripdata_2022-01.parquet to local bucket
-  - Verify file size and record count
-  - Update configuration to point to local path
-  - _Requirements: 9.1, 9.3, 9.4_
-
-- [x] 0.3 Copy medium dataset (1 year, ~1.2GB)
-  - Copy all 2022 files to local bucket
-  - Verify file count (12 files)
-  - Update configuration for medium tests
-  - _Requirements: 9.1, 9.3, 9.4_
-
-- [x] 0.4 Copy large dataset (5 years, ~10GB)
-  - Copy 2018-2022 files to local bucket
-  - Verify file count (60 files)
-  - Update configuration for large tests
-  - _Requirements: 9.1, 9.3, 9.4_
-
-- [ ] 0.5 Write property test for cross-region detection
-  - **Property 1: Cross-region detection triggers localization**
-  - **Validates: Requirements 9.1**
-  - Generate random region pairs
-  - Verify localization triggers when regions differ
-  - Use Hypothesis with 100 iterations
-  - _Requirements: 9.1_
-
-- [ ] 0.6 Write property test for dataset size mapping
-  - **Property 2: Dataset size maps to correct time range**
-  - **Validates: Requirements 9.3**
-  - Generate random dataset size requests
-  - Verify correct time range selection (small→1mo, medium→1yr, large→5yr)
-  - Use Hypothesis with 100 iterations
-  - _Requirements: 9.3_
-
-- [ ] 0.7 Write property test for configuration updates
-  - **Property 3: Configuration updates after localization**
-  - **Validates: Requirements 9.4**
-  - Generate random localization scenarios
-  - Verify configuration points to local bucket after completion
-  - Use Hypothesis with 100 iterations
-  - _Requirements: 9.4_
-
-- [ ] 0.8 Write property test for region consistency
-  - **Property 4: Region consistency during benchmarks**
-  - **Validates: Requirements 9.5**
-  - Generate random benchmark configurations
-  - Verify data source region matches compute region
-  - Use Hypothesis with 100 iterations
-  - _Requirements: 9.5_
-
-- [x] 0.9 Update NYC Taxi config to use localized data
-  - Modify `src/etl/nyc_taxi_config.py`
-  - Add region detection logic
-  - Update S3 paths to use local bucket
-  - Add fallback to public bucket if local not available
-  - _Requirements: 9.4, 9.5_
-
----
-
-## Phase 1: NYC Taxi ETL Implementation
-
-- [x] 1. Implement NYC Taxi ETL logic for both stacks
-  - Create shared ETL logic that both implementations will use
-  - Define data size configurations (tiny, small, medium, large, xlarge)
-  - Implement identical transformation logic
-  - _Requirements: 1.1, 4.1, 4.2_
-
-- [x] 1.1 Create NYC Taxi data access module
-  - Write Python module to read from `s3://nyc-tlc/trip data/`
-  - Support date range selection (1 month to 10 years)
-  - Handle schema evolution across years
-  - Add data validation and error handling
-  - _Requirements: 4.1, 4.2_
-
-- [x] 1.2 Implement Polars NYC Taxi ETL
-  - Create `src/etl/polars_etl_nyc_taxi.py`
-  - Implement Extract: Read Parquet from S3 using s3fs
-  - Implement Transform: Filter, calculate price_per_mile, aggregate by location
-  - Implement Load: Write results to benchmark S3 bucket
-  - Add timing and memory tracking
-  - _Requirements: 1.1, 1.2, 4.2, 4.4_
-
-- [x] 1.3 Implement Spark NYC Taxi ETL
-  - Create `src/etl/spark_etl_nyc_taxi.py`
-  - Implement identical ETL logic using PySpark
-  - Use s3a:// protocol for S3 access
-  - Add timing and resource tracking
-  - Ensure output matches Polars implementation exactly
-  - _Requirements: 1.1, 1.2, 4.2, 4.4_
-
-- [ ]* 1.4 Write integration tests for ETL equivalence
-  - Test that both implementations produce identical results
-  - Validate data quality checks
-  - Test error handling
-  - _Requirements: 1.1, 1.2_
-
----
-
-## Phase 2: EC2 Deployment for Polars (Vertical Scaling)
-
-- [x] 2. Deploy Polars on EC2 for vertical scaling comparison
-  - Set up single EC2 instance with Polars
-  - Configure S3 access via IAM instance profile
-  - Create deployment automation
-  - _Requirements: 2.1, 2.2, 6.1, 6.2_
-
-- [x] 2.1 Create EC2 Terraform module
-  - Write `terraform/modules/ec2/main.tf`
-  - Configure instance types: r6i.2xlarge, r6i.4xlarge, r7g.2xlarge (Graviton)
-  - Create IAM instance profile with S3 read/write permissions
-  - Add security group for SSH access
-  - Configure CloudWatch agent for monitoring
-  - _Requirements: 2.1, 6.1, 6.2_
-
-- [x] 2.2 Create EC2 user data script for Polars setup
-  - Write `scripts/ec2_setup_polars.sh`
-  - Install Python 3.12, uv, Polars, s3fs, boto3
-  - Clone ETL repository
-  - Configure CloudWatch agent
-  - Set up systemd service for ETL execution
-  - _Requirements: 2.1, 6.1_
-
-- [x] 2.3 Create EC2 deployment script
-  - Write `scripts/deploy_ec2_polars.sh`
-  - Launch EC2 instance with Terraform
-  - Wait for instance to be ready
-  - Verify Polars installation
-  - Test S3 access
-  - _Requirements: 2.1, 2.2, 6.1_
-
-- [x] 2.4 Create EC2 benchmark execution script
-  - Write `scripts/run_ec2_benchmark.sh`
-  - SSH to EC2 instance
-  - Execute Polars ETL with specified data size
-  - Collect metrics (execution time, memory usage)
-  - Download results from S3
-  - _Requirements: 1.2, 2.1, 5.1_
-
----
-
-## Phase 3: EKS Deployment for Spark (Horizontal Scaling)
-
-- [x] 3. Deploy EKS infrastructure with Terraform
-  - ✅ **COMPLETED**: EKS cluster, VPC, S3, ECR, IAM modules created
-  - ✅ **Created**: Terraform modules for all AWS resources
-  - _Requirements: 2.3, 6.1, 6.2_
-
-- [x] 4. Install Spark Operator on EKS
-  - ✅ **COMPLETED**: Spark Operator v1.4.8 installed via Helm
-  - ✅ **Created**: Installation, configuration, and verification scripts
-  - ✅ **Created**: SparkApplication manifest template
-  - _Requirements: 2.2, 2.3, 6.2_
-
-- [x] 5. Configure Pod Identity Association for Spark
-  - Replace IRSA with EKS Pod Identity Association
-  - Update Terraform IAM module
-  - Update SparkApplication manifest
-  - Test S3 access from Spark pods
-  - _Requirements: 6.2, 6.3, 8.1, 8.2, 8.3_
-
-- [x] 5.1 Update Terraform for Pod Identity
-  - Add `aws_eks_pod_identity_association` resource
-  - Remove OIDC provider configuration
-  - Simplify IAM role trust policy
-  - Update ServiceAccount configuration
-  - _Requirements: 6.2, 8.1, 8.2_
-
-- [x] 5.2 Update SparkApplication for Pod Identity
-  - Remove IRSA annotations from ServiceAccount
-  - Update Spark configuration for Pod Identity
-  - Test S3 access with new authentication method
-  - Document benefits over IRSA
-  - _Requirements: 6.2, 8.1, 8.3_
-
-- [x] 6. Build and push AMD Docker images to ECR
-  - Update Dockerfiles for NYC Taxi ETL
-  - Add S3 access libraries
-  - Push to ECR
-  - _Requirements: 2.1, 2.3_
-
-- [x] 6.1 Update Dockerfile.spark for NYC Taxi ETL
-  - Add AWS Hadoop libraries for S3 access
-  - Copy NYC Taxi ETL script
-  - Add required Python dependencies
-  - Test local build
-  - _Requirements: 2.1, 2.3_
-
-- [x] 6.2 Update Dockerfile.polars for NYC Taxi ETL (if using EKS)
-  - Add boto3 and s3fs for S3 access
-  - Copy NYC Taxi ETL script
-  - Add required Python dependencies
-  - Test local build
-  - _Requirements: 2.1, 2.3_
-
-- [x] 6.3 Push images to ECR
-  - Authenticate with ECR
-  - Tag images with version
-  - Push spark-etl image
-  - Push polars-etl image (if needed)
-  - Add Makefile targets
-  - _Requirements: 2.1, 2.3_
-
-- [x] 7. Create SparkApplication manifests for different scales
-  - Create manifests for tiny, small, medium, large, xlarge datasets
-  - Configure executor scaling for each size
-  - Add cost tracking labels
-  - _Requirements: 1.1, 2.2, 5.1, 5.2_
-
-- [x] 7.1 Create SparkApplication for tiny dataset (1 month)
-  - 2 executors, 4 cores, 8GB each
-  - Read from s3://nyc-tlc/trip data/yellow_tripdata_2022-01.parquet
-  - Write to benchmark bucket
-  - _Requirements: 1.1, 5.1_
-
-- [x] 7.2 Create SparkApplication for small dataset (1 year)
-  - 3 executors, 4 cores, 8GB each
-  - Read 12 months of data
-  - _Requirements: 1.1, 5.1_
-
-- [x] 7.3 Create SparkApplication for medium dataset (3 years)
-  - 5 executors, 4 cores, 16GB each
-  - Read 36 months of data
-  - _Requirements: 1.1, 5.1_
-
-- [x] 7.4 Create SparkApplication for large dataset (5 years)
-  - 10 executors, 4 cores, 16GB each
-  - Read 60 months of data
-  - _Requirements: 1.1, 5.1_
-
-- [x] 7.5 Create SparkApplication for xlarge dataset (8+ years)
-  - 20 executors, 4 cores, 16GB each
-  - Read 96+ months of data
-  - _Requirements: 1.1, 5.1_
-
----
-
-## Phase 4: Benchmark Execution and Metrics Collection
-
-- [x] 8. Create benchmark orchestration framework
-  - Automate execution of both EC2 and EKS benchmarks
-  - Collect metrics from both environments
-  - Store results in S3
-  - _Requirements: 1.2, 3.1, 3.2, 5.1_
-
-- [x] 8.1 Create benchmark orchestration script
-  - Write `scripts/run_full_benchmark.py`
-  - Execute EC2 benchmarks for all data sizes
-  - Execute EKS benchmarks for all data sizes
-  - Collect metrics from CloudWatch
-  - Download results from S3
-  - _Requirements: 1.2, 5.1_
-
-- [x] 8.2 Implement CloudWatch metrics collection
-  - Query EC2 instance metrics (CPU, memory, network)
-  - Query EKS pod metrics (CPU, memory, network)
-  - Calculate execution time from logs
-  - Export metrics to JSON
-  - _Requirements: 1.2, 4.4, 6.5_
-
-- [x] 8.3 Create results validation script
-  - Verify both implementations produce identical results
-  - Check data quality
-  - Validate record counts
-  - Compare aggregation results
-  - _Requirements: 1.1, 1.3_
-
----
-
-## Phase 5: Cost Analysis and Reporting
-
-- [x] 9. Implement comprehensive cost analysis
-  - Calculate EC2 costs (instance hours + S3)
-  - Calculate EKS costs (control plane + nodes + S3)
-  - Compare cost-per-GB-processed
-  - Include operational overhead in TCO
-  - _Requirements: 3.1, 3.2, 7.1, 7.2, 7.3, 7.4_
-
-- [x] 9.1 Create cost calculation module
-  - Write `src/analysis/cost_calculator.py`
-  - Implement EC2 cost model
-  - Implement EKS cost model
-  - Calculate cost-per-GB and cost-per-hour
-  - Add Graviton cost comparison
-  - _Requirements: 7.1, 7.2, 7.3, 7.5_
-
-- [x] 9.2 Create TCO analysis module
-  - Write `src/analysis/tco_analyzer.py`
-  - Include deployment time costs
-  - Include monitoring setup costs
-  - Include debugging complexity costs
-  - Calculate total operational overhead
-  - _Requirements: 7.4_
-
-- [x] 9.3 Identify crossover point
-  - Analyze performance vs. data size
-  - Find where Spark becomes faster
-  - Find where Spark becomes cost-effective
-  - Document the crossover point
-  - _Requirements: 1.3, 1.4, 3.2_
-
-- [x] 10. Create comprehensive benchmark report
-  - Generate "Vertical vs. Horizontal Scaling" report
-  - Include performance charts
-  - Include cost analysis
-  - Include decision framework
-  - _Requirements: 3.1, 3.2, 3.3, 3.4_
-
-- [x] 10.1 Create report generator
-  - Write `scripts/generate_benchmark_report.py`
-  - Generate performance comparison charts
-  - Generate cost comparison charts
-  - Create crossover point visualization
-  - Export to Markdown and PowerPoint
-  - _Requirements: 3.1, 3.2_
-
-- [x] 10.2 Create decision framework document
-  - Write `docs/DECISION_FRAMEWORK.md`
-  - Define "Use Polars when..." criteria
-  - Define "Use Spark when..." criteria
-  - Include cost considerations
-  - Include operational complexity considerations
-  - _Requirements: 3.2, 3.3_
-
----
-
-## Phase 6: Documentation and Cleanup
-
-- [x] 11. Create comprehensive documentation
-  - Update README with new strategy
-  - Create deployment guides
-  - Document cost analysis methodology
-  - _Requirements: 3.3_
-
-- [x] 11.1 Update README with "Ant vs. Cannon" narrative
-  - Explain vertical vs. horizontal scaling
-  - Show example results
-  - Include cost comparison
-  - Add decision framework summary
-  - _Requirements: 3.3_
-
-- [x] 11.2 Create EC2 deployment guide
-  - Write `docs/EC2_DEPLOYMENT.md`
-  - Step-by-step EC2 setup
-  - Polars installation
-  - Benchmark execution
-  - Troubleshooting
-  - _Requirements: 2.4, 3.3_
-
-- [x] 11.3 Create EKS deployment guide
-  - Write `docs/EKS_DEPLOYMENT.md`
-  - Step-by-step EKS setup
-  - Spark Operator installation
-  - Pod Identity configuration
-  - Benchmark execution
-  - _Requirements: 2.3, 3.3_
-
-- [x] 11.4 Create cost analysis guide
-  - Write `docs/COST_ANALYSIS.md`
-  - Explain cost calculation methodology
-  - Show example cost breakdowns
-  - Include TCO considerations
-  - Provide cost optimization tips
-  - _Requirements: 7.1, 7.2, 7.3, 7.4_
-
-- [x] 12. Add Makefile targets for new workflow
-  - Add EC2 deployment targets
-  - Add benchmark execution targets
-  - Add cost analysis targets
-  - Add cleanup targets
-  - _Requirements: 5.1, 5.2_
-
----
-
-## Summary of Changes from Original Plan
-
-**Removed Tasks:**
-- ❌ Task 1: Generate synthetic clickstream data (using NYC Taxi instead)
-- ❌ Task 14: Generate benchmark datasets on EKS (using public data)
-
-**Added Tasks:**
-- ✅ Phase 1: NYC Taxi ETL implementation
-- ✅ Phase 2: EC2 deployment for Polars
-- ✅ Phase 5: Comprehensive cost analysis and TCO
-
-**Updated Tasks:**
-- 🔄 Task 11: Use Pod Identity instead of IRSA
-- 🔄 Task 13: Read from NYC Taxi public bucket
-- 🔄 Task 15: Focus on cost analysis and crossover point
-
-**Preserved Tasks:**
-- ✅ Phase 3: EKS and Spark Operator (already completed)
-- ✅ Docker builds and ECR push
-- ✅ Monitoring and metrics collection
+This implementation plan breaks down the TPC-H benchmark POC into discrete, incremental tasks. Each task builds on previous work and includes testing to validate correctness. The plan follows a logical progression: data generation → baseline implementation → challenger implementation → orchestration → analysis.
+
+**Note**: This is a **strategic pivot** from the existing NYC Taxi benchmark. The project already has:
+- ✅ Existing `src/` structure with `analysis/`, `etl/`, `utils/` directories
+- ✅ NYC Taxi ETL implementations (Polars and Spark)
+- ✅ Analysis infrastructure (cost calculator, crossover analyzer, TCO analyzer)
+- ✅ Most dependencies already configured in `pyproject.toml`
+
+Tasks are written to **adapt and extend** existing code rather than create from scratch.
+
+## Tasks
+
+- [x] 1. Adapt existing project for TPC-H benchmark pivot
+  - Add src/generation/ directory for TPC-H data generation
+  - Add src/orchestration/ directory for multi-job orchestration
+  - Update pyproject.toml to add missing dependencies: boto3, hypothesis (duckdb, polars, pyarrow, pyspark, pytest already present)
+  - Create/update .env.example with TPC-H-specific environment variables (S3_BUCKET_NAME, EKS_CLUSTER_NAME, BATCH_JOB_QUEUE, BATCH_JOB_DEFINITION)
+  - Review existing logging configuration in src/utils/
+  - _Requirements: 6.2, 6.5, 7.5, 10.2_
+
+- [ ]* 1.1 Write unit tests for new directory structure
+  - Test that src/generation/ and src/orchestration/ directories exist
+  - Test that TPC-H environment variables can be loaded
+  - _Requirements: 6.2_
+
+- [ ] 2. Implement TPC-H data generator
+  - [ ] 2.1 Create TPCHGenerator class with DuckDB integration
+    - Initialize DuckDB connection with S3 extension
+    - Implement generate_table() method for single table generation
+    - Implement generate_all_tables() method for complete dataset
+    - Add progress logging for each table
+    - _Requirements: 1.1, 1.5_
+
+  - [ ]* 2.2 Write property test for TPC-H table generation completeness
+    - **Property 1: TPC-H Table Generation Completeness**
+    - **Validates: Requirements 1.1**
+
+  - [ ] 2.3 Implement Parquet output to S3
+    - Configure DuckDB S3 extension with AWS credentials
+    - Write tables as Parquet with Snappy compression
+    - Verify files are written to correct S3 paths
+    - _Requirements: 1.2, 9.2_
+
+  - [ ]* 2.4 Write property test for Parquet output
+    - **Property 2: Parquet Output to S3**
+    - **Validates: Requirements 1.2**
+
+  - [ ]* 2.5 Write property test for Parquet compression
+    - **Property 25: Parquet Compression**
+    - **Validates: Requirements 9.2**
+
+  - [ ] 2.6 Implement lineitem table partitioning
+    - Extract year and month from l_shipdate
+    - Create Hive-style partitioned structure (year=YYYY/month=MM)
+    - Write partitioned Parquet files to S3
+    - _Requirements: 1.3, 9.1, 9.3_
+
+  - [ ]* 2.7 Write property test for lineitem partitioning
+    - **Property 3: Lineitem Partitioning Structure**
+    - **Validates: Requirements 1.3, 9.1, 9.3**
+
+  - [ ] 2.8 Add scale factor configuration
+    - Support SF 10 and SF 100 via command-line argument
+    - Validate scale factor is positive integer
+    - Log dataset size after generation
+    - _Requirements: 1.4_
+
+  - [ ]* 2.9 Write property test for scale factor support
+    - **Property 4: Scale Factor Support**
+    - **Validates: Requirements 1.4**
+
+  - [ ]* 2.10 Write property test for generation logging
+    - **Property 5: Generation Progress Logging**
+    - **Validates: Requirements 1.5_
+
+- [ ] 3. Checkpoint - Verify data generation
+  - Run generator with SF 10 and verify all tables created
+  - Check S3 structure matches expected layout
+  - Ensure all tests pass, ask the user if questions arise
+
+- [ ] 4. Implement PySpark ETL baseline
+  - [ ] 4.1 Create SparkETLJob class
+    - Initialize SparkSession with S3 configuration
+    - Implement load_tables() to read Parquet from S3
+    - Validate table schemas match TPC-H specification
+    - _Requirements: 2.1_
+
+  - [ ] 4.2 Implement TPC-H Query 3 (Shipping Priority)
+    - Join customer, orders, and lineitem tables
+    - Apply filters: c_mktsegment, o_orderdate, l_shipdate
+    - Aggregate by l_orderkey with revenue calculation
+    - Order by revenue descending and limit to top 10
+    - _Requirements: 2.2_
+
+  - [ ]* 4.3 Write property test for query result equivalence
+    - **Property 6: Query Result Equivalence**
+    - **Validates: Requirements 2.2**
+
+  - [ ] 4.4 Implement PerformanceTracker class
+    - Track startup time (job submission to execution start)
+    - Track execution time (data read to result write)
+    - Track peak memory usage via Spark metrics
+    - Track bytes read and written from S3
+    - _Requirements: 2.3, 8.1, 8.2, 8.3, 8.4_
+
+  - [ ]* 4.5 Write property test for complete metrics collection
+    - **Property 7: Complete Metrics Collection**
+    - **Validates: Requirements 2.3, 3.6, 8.1, 8.2, 8.3, 8.4**
+
+  - [ ] 4.6 Write results and metrics to S3
+    - Write query results as Parquet
+    - Write metrics as JSON with all required fields
+    - _Requirements: 2.5, 8.5_
+
+  - [ ]* 4.7 Write property test for metrics persistence
+    - **Property 8: Metrics Persistence**
+    - **Validates: Requirements 8.5**
+
+  - [ ] 4.8 Create SparkApplication Kubernetes manifest
+    - Define SparkApplication CRD for Spark Operator
+    - Configure executor count and resources
+    - Set up Pod Identity Association for S3 access
+    - _Requirements: 2.4_
+
+- [ ] 5. Implement Polars + DuckDB ETL challenger
+  - [ ] 5.1 Create PolarsETLJob class for TPC-H (adapt from existing PolarsNYCTaxiETL)
+    - Initialize DuckDB connection with httpfs extension
+    - Configure S3 credentials for DuckDB
+    - Reuse existing PipelineTimer for performance tracking
+    - _Requirements: 3.1_
+
+  - [ ] 5.2 Implement query with predicate pushdown
+    - Use DuckDB to apply filters at storage layer
+    - Measure bytes read with and without pushdown
+    - Log pushdown efficiency metrics
+    - _Requirements: 3.2, 9.5_
+
+  - [ ]* 5.3 Write property test for predicate pushdown efficiency
+    - **Property 9: Predicate Pushdown Efficiency**
+    - **Validates: Requirements 3.2, 9.5**
+
+  - [ ] 5.4 Implement query with projection pushdown
+    - Use DuckDB to select only required columns
+    - Measure bytes read with and without projection
+    - Log projection efficiency metrics
+    - _Requirements: 3.3_
+
+  - [ ]* 5.5 Write property test for projection pushdown efficiency
+    - **Property 10: Projection Pushdown Efficiency**
+    - **Validates: Requirements 3.3**
+
+  - [ ] 5.6 Implement zero-copy handoff to Polars
+    - Execute DuckDB query to get relation object
+    - Use duckdb_rel.pl() for zero-copy transfer
+    - Verify no serialization occurs
+    - _Requirements: 3.4_
+
+  - [ ] 5.7 Implement Polars streaming mode
+    - Use pl.scan_parquet() for lazy evaluation
+    - Apply transformations (filter, group_by, agg)
+    - Use .collect(streaming=True) for out-of-core processing
+    - _Requirements: 3.5_
+
+  - [ ] 5.8 Implement TPC-H Query 3 logic
+    - Match PySpark query exactly (same filters, joins, aggregations)
+    - Verify results match PySpark output
+    - _Requirements: 2.2_
+
+  - [ ] 5.9 Adapt performance tracking from existing PipelineTimer
+    - Reuse timing_decorator.py infrastructure
+    - Track same metrics as PySpark for fair comparison
+    - _Requirements: 3.6_
+
+  - [ ] 5.10 Write results and metrics to S3
+    - Write query results as Parquet using PyArrow
+    - Write metrics as JSON (adapt existing metrics format)
+    - _Requirements: 2.5, 8.5_
+
+  - [ ] 5.11 Create AWS Batch job definition
+    - Define Fargate task with configurable vCPU and memory
+    - Set up IAM role for S3 access
+    - Configure CloudWatch Logs integration
+    - _Requirements: 3.7_
+
+  - [ ]* 5.12 Write property test for partition pruning
+    - **Property 11: Partition Pruning Efficiency**
+    - **Validates: Requirements 9.4**
+
+- [ ] 6. Checkpoint - Verify both ETL implementations
+  - Run both PySpark and Polars jobs on same data
+  - Verify results are identical
+  - Compare metrics and validate tracking
+  - Ensure all tests pass, ask the user if questions arise
+
+- [ ] 7. Implement multi-job orchestrator
+  - [ ] 7.1 Create JobOrchestrator class
+    - Initialize with EKS cluster name and Batch job queue
+    - Set up boto3 clients for EKS and Batch
+    - _Requirements: 4.1, 4.2_
+
+  - [ ] 7.2 Implement Spark job submission
+    - Use Kubernetes API to create SparkApplication resources
+    - Submit 10 jobs concurrently
+    - Record job creation timestamps
+    - _Requirements: 4.1_
+
+  - [ ]* 7.3 Write property test for Spark job submission
+    - **Property 12: Concurrent Job Submission (Spark)**
+    - **Validates: Requirements 4.1**
+
+  - [ ] 7.4 Implement Batch job submission
+    - Use boto3 to submit jobs to AWS Batch
+    - Submit 10 jobs concurrently
+    - Record job creation timestamps
+    - _Requirements: 4.2_
+
+  - [ ]* 7.5 Write property test for Batch job submission
+    - **Property 12: Concurrent Job Submission (Batch)**
+    - **Validates: Requirements 4.2**
+
+  - [ ] 7.6 Implement job monitoring
+    - Poll job status every 5 seconds
+    - Record "Job Started" timestamp when execution begins
+    - Record "Job Completed" timestamp when finished
+    - _Requirements: 4.3_
+
+  - [ ]* 7.7 Write property test for timestamp recording
+    - **Property 13: Timestamp Recording**
+    - **Validates: Requirements 4.3**
+
+  - [ ] 7.8 Calculate startup latency
+    - Compute delta: started_at - created_at
+    - Validate latency is non-negative
+    - Store latency in job metrics
+    - _Requirements: 4.4_
+
+  - [ ]* 7.9 Write property test for startup latency calculation
+    - **Property 14: Startup Latency Calculation**
+    - **Validates: Requirements 4.4**
+
+  - [ ] 7.10 Collect metrics from all jobs
+    - Wait for all 20 jobs to complete
+    - Download metrics JSON from S3 for each job
+    - Aggregate into single dataset
+    - _Requirements: 4.5_
+
+  - [ ]* 7.11 Write property test for complete metrics collection
+    - **Property 15: Complete Metrics Collection from All Jobs**
+    - **Validates: Requirements 4.5**
+
+- [ ] 8. Implement analysis dashboard
+  - [ ] 8.1 Adapt MetricsAnalyzer class (leverage existing src/analysis/ modules)
+    - Extend existing cost_calculator.py for TPC-H metrics
+    - Load metrics JSON files from S3
+    - Parse into pandas DataFrame
+    - _Requirements: 5.1_
+
+  - [ ]* 8.2 Write property test for metrics extraction
+    - **Property 16: Metrics Extraction from Logs**
+    - **Validates: Requirements 5.1**
+
+  - [ ] 8.3 Calculate performance statistics
+    - Compute mean, median, p95 for all metrics
+    - Group by job type (Spark vs Polars)
+    - Adapt existing crossover_analyzer.py logic
+    - _Requirements: 5.1_
+
+  - [ ] 8.4 Implement cost calculation for TPC-H benchmark
+    - Extend existing cost_calculator.py with TPC-H pricing
+    - Calculate EKS costs: control plane + node costs
+    - Calculate Batch costs: vCPU + memory costs
+    - Compute cost-per-GB-processed
+    - _Requirements: 5.3, 5.4_
+
+  - [ ]* 8.5 Write property test for cost calculation accuracy
+    - **Property 18: Cost Calculation Accuracy**
+    - **Validates: Requirements 5.3**
+
+  - [ ]* 8.6 Write property test for cost metrics in report
+    - **Property 19: Cost Metrics in Report**
+    - **Validates: Requirements 5.4**
+
+  - [ ] 8.7 Generate Markdown comparison report
+    - Create table with performance metrics side-by-side
+    - Include cost analysis section
+    - Highlight winner for each metric
+    - _Requirements: 5.2_
+
+  - [ ]* 8.8 Write property test for Markdown report generation
+    - **Property 17: Markdown Report Generation**
+    - **Validates: Requirements 5.2**
+
+  - [ ] 8.9 Add startup latency analysis
+    - Calculate mean, median, p95 for startup latency
+    - Compare EKS vs Batch startup times
+    - Include in report with interpretation
+    - _Requirements: 5.5_
+
+  - [ ]* 8.10 Write property test for startup latency comparison
+    - **Property 20: Startup Latency Comparison**
+    - **Validates: Requirements 5.5**
+
+  - [ ] 8.11 Generate summary report
+    - Synthesize key findings
+    - Provide recommendations based on results
+    - Include decision framework
+    - _Requirements: 10.4_
+
+  - [ ]* 8.12 Write property test for summary report generation
+    - **Property 26: Summary Report Generation**
+    - **Validates: Requirements 10.4**
+
+- [ ] 9. Implement code quality standards
+  - [ ] 9.1 Add type hints to all functions
+    - Review all function signatures
+    - Add type hints for parameters and return values
+    - Run mypy to validate type correctness
+    - _Requirements: 6.1_
+
+  - [ ]* 9.2 Write property test for type hint coverage
+    - **Property 21: Type Hint Coverage**
+    - **Validates: Requirements 6.1**
+
+  - [ ] 9.3 Add exception handling
+    - Wrap S3 operations in try/except blocks
+    - Wrap API calls in try/except blocks
+    - Log all exceptions with stack traces
+    - _Requirements: 6.3_
+
+  - [ ]* 9.4 Write property test for exception handling coverage
+    - **Property 22: Exception Handling Coverage**
+    - **Validates: Requirements 6.3**
+
+  - [ ] 9.5 Add docstrings to all public functions
+    - Write docstrings with purpose, parameters, and return values
+    - Follow Google or NumPy docstring format
+    - _Requirements: 6.4_
+
+  - [ ]* 9.6 Write property test for docstring coverage
+    - **Property 23: Docstring Coverage**
+    - **Validates: Requirements 6.4**
+
+  - [ ] 9.7 Ensure environment variable configuration
+    - Replace any hardcoded values with env vars
+    - Validate all required env vars at startup
+    - _Requirements: 6.5, 7.1, 7.2, 7.3, 7.4_
+
+  - [ ]* 9.8 Write property test for environment variable configuration
+    - **Property 24: Environment Variable Configuration**
+    - **Validates: Requirements 6.5, 7.1, 7.2, 7.3, 7.4**
+
+  - [ ] 9.9 Implement debug logging control
+    - Add DEBUG environment variable check
+    - Enable verbose logging when DEBUG=true
+    - Use standard logging levels otherwise
+    - _Requirements: 10.5_
+
+  - [ ]* 9.10 Write property test for debug logging control
+    - **Property 27: Debug Logging Control**
+    - **Validates: Requirements 10.5**
+
+- [ ] 10. Update documentation for TPC-H pivot
+  - Update README.md with TPC-H benchmark overview and architecture
+  - Document TPC-H setup steps: data generation, AWS Batch configuration
+  - Document how to run TPC-H data generation
+  - Document how to run TPC-H benchmarks (EKS + Batch)
+  - Document how to analyze TPC-H results
+  - _Requirements: 10.1, 10.3_
+
+- [ ] 11. Final checkpoint - End-to-end validation
+  - Run complete benchmark: generation → execution → analysis
+  - Verify all 20 jobs complete successfully
+  - Review generated reports for accuracy
+  - Validate cost calculations against AWS pricing
+  - Ensure all tests pass, ask the user if questions arise
+
+## Notes
+
+- Tasks marked with `*` are optional and can be skipped for faster MVP
+- Each task references specific requirements for traceability
+- Checkpoints ensure incremental validation
+- Property tests validate universal correctness properties with 100+ iterations
+- Unit tests validate specific examples and edge cases
+- The implementation follows clean code principles with type hints, docstrings, and proper error handling
