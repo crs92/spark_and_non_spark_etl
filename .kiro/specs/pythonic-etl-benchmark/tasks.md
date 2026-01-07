@@ -27,8 +27,8 @@ Tasks are written to **adapt and extend** existing code rather than create from 
   - Test that TPC-H environment variables can be loaded
   - _Requirements: 6.2_
 
-- [ ] 2. Implement TPC-H data generator
-  - [ ] 2.1 Create TPCHGenerator class with DuckDB integration
+- [x] 2. Implement TPC-H data generator
+  - [x] 2.1 Create TPCHGenerator class with DuckDB integration
     - Initialize DuckDB connection with S3 extension
     - Implement generate_table() method for single table generation
     - Implement generate_all_tables() method for complete dataset
@@ -39,7 +39,7 @@ Tasks are written to **adapt and extend** existing code rather than create from 
     - **Property 1: TPC-H Table Generation Completeness**
     - **Validates: Requirements 1.1**
 
-  - [ ] 2.3 Implement Parquet output to S3
+  - [x] 2.3 Implement Parquet output to S3
     - Configure DuckDB S3 extension with AWS credentials
     - Write tables as Parquet with Snappy compression
     - Verify files are written to correct S3 paths
@@ -53,7 +53,7 @@ Tasks are written to **adapt and extend** existing code rather than create from 
     - **Property 25: Parquet Compression**
     - **Validates: Requirements 9.2**
 
-  - [ ] 2.6 Implement lineitem table partitioning
+  - [x] 2.6 Implement lineitem table partitioning
     - Extract year and month from l_shipdate
     - Create Hive-style partitioned structure (year=YYYY/month=MM)
     - Write partitioned Parquet files to S3
@@ -63,7 +63,7 @@ Tasks are written to **adapt and extend** existing code rather than create from 
     - **Property 3: Lineitem Partitioning Structure**
     - **Validates: Requirements 1.3, 9.1, 9.3**
 
-  - [ ] 2.8 Add scale factor configuration
+  - [x] 2.8 Add scale factor configuration
     - Support SF 10 and SF 100 via command-line argument
     - Validate scale factor is positive integer
     - Log dataset size after generation
