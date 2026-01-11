@@ -30,15 +30,18 @@ This POC answers the critical question: **"When should we use single-node high-p
 
 ### Requirement 1: TPC-H Synthetic Data Generation
 
-**User Story:** As a benchmark engineer, I want to generate TPC-H standard benchmark data at scale factors 10 and 100, so that I can test performance on industry-standard datasets of 10GB and 100GB.
+**User Story:** As a benchmark engineer, I want to generate TPC-H standard benchmark data at scale factors 10 and 100 using tpchgen-rs (20x faster than alternatives), so that I can test performance on industry-standard datasets of 10GB and 100GB without waiting hours.
 
 #### Acceptance Criteria
 
-1. WHEN generating data THEN the system SHALL use DuckDB to create all 8 TPC-H tables (customer, lineitem, nation, orders, part, partsupp, region, supplier)
-2. WHEN writing data THEN the system SHALL output Parquet files directly to S3 without intermediate local storage
-3. WHEN partitioning data THEN the system SHALL partition the lineitem table by l_shipdate to simulate realistic data lake scenarios
-4. WHEN configuring scale THEN the system SHALL support Scale Factor 10 (~10GB) and Scale Factor 100 (~100GB)
-5. WHEN executing generation THEN the system SHALL log progress and completion time for each table
+1. WHEN generating data THEN the system SHALL use tpchgen-rs CLI tool to create all 8 TPC-H tables (customer, lineitem, nation, orders, part, partsupp, region, supplier)
+2. WHEN writing data THEN the system SHALL output Parquet files directly to local storage with streaming generation (constant memory usage)
+3. WHEN uploading data THEN the system SHALL upload generated Parquet files to S3 using AWS CLI after generation completes
+4. WHEN configuring scale THEN the system SHALL support Scale Factor 10 (~10GB, ~6 seconds) and Scale Factor 100 (~100GB, ~45 seconds)
+5. WHEN executing generation THEN the system SHALL log progress and completion time for the entire dataset
+6. WHEN generating data THEN the system SHALL use constant memory (~2GB) regardless of scale factor
+7. WHEN cleaning up THEN the system SHALL remove local temporary files after successful S3 upload (unless --keep-local flag is used)
+8. WHEN tpchgen-rs is not installed THEN the system SHALL provide clear installation instructions (cargo install tpchgen-cli)
 
 ### Requirement 2: PySpark Legacy Baseline Implementation
 

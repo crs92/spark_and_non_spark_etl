@@ -1,291 +1,319 @@
-# TPC-H Data Generation Module
+# TPC-H Data Generation
 
-This module contains components for generating TPC-H benchmark data at various scale factors.
+Complete guide for generating TPC-H benchmark data locally or on EC2.
 
-## Purpose
+## Overview
 
-Generate industry-standard TPC-H benchmark data and write it to S3 in Parquet format with appropriate partitioning.
+Two generation methods available:
 
-## Key Components
+1. **Local Generation** (`generate_tpch_data_fast.py`) - Fast local generation using tpchgen-rs
+2. **EC2 Generation** (`generate_on_ec2.py`) - Generate on EC2 for large scale factors with fast S3 upload
 
-- **TPCHGenerator**: Main class for generating TPC-H data using DuckDB
-- **generate_tpch_data.py**: CLI script for easy data generation
-- Data generation utilities
-- S3 upload functionality
-- Partitioning logic for lineitem table
+## Quick Start
 
-## Features
-
-- ✅ Generates all 8 TPC-H tables (customer, lineitem, nation, orders, part, partsupp, region, supplier)
-- ✅ Supports Scale Factor 10 (~10GB) and Scale Factor 100 (~100GB)
-- ✅ Writes directly to S3 in Parquet format with Snappy compression
-- ✅ Hive-style partitioning for lineitem table by year/month
-- ✅ Progress logging for each table
-- ✅ Configurable via environment variables or CLI arguments
-- ✅ Context manager support for resource cleanup
-
-## Requirements
-
-### Environment Variables
-
-See `.env.example` for required environment variables:
+### Local Generation (Recommended for SF ≤ 10)
 
 ```bash
-# Required
-S3_BUCKET_NAME=your-tpch-benchmark-bucket
-AWS_REGION=us-east-1
+# Install tpchgen-rs (one-time setup)
+cargo install tpchgen-cli
 
-# Optional
-PARQUET_COMPRESSION=snappy  # or zstd, gzip
-DEBUG=false                  # Enable debug logging
-LOG_LEVEL=INFO              # Logging level
+# Generate SF 10 locally
+python -m src.generation.generate_tpch_data_fast --scale-factor 10
 ```
 
-### AWS Credentials
+**Pros:**
+- Fast for small scale factors (SF 1-10)
+- No AWS costs
+- Immediate results (~6 seconds generation)
 
-The generator uses AWS credentials in the following order:
-1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-2. IAM role (recommended for EC2/ECS/Lambda)
-3. AWS credentials file (`~/.aws/credentials`)
+**Cons:**
+- Requires local memory (SF 10 = ~2GB)
+- Slow S3 upload on slow networks
+- Limited by local resources
 
-## Usage
-
-### Command Line Interface
-
-Generate all tables at Scale Factor 10:
+### EC2 Generation (Recommended for SF ≥ 10)
 
 ```bash
-python -m src.generation.generate_tpch_data --scale-factor 10
+# Generate SF 100 on EC2
+python -m src.generation.generate_on_ec2 --scale-factor 100
 ```
 
-Generate all tables at Scale Factor 100:
+**Pros:**
+- Fast S3 upload (10+ Gbps internal AWS network)
+- No local memory limits
+- Handles large scale factors (SF 100 = 38GB)
+
+**Cons:**
+- AWS costs (~$0.20 for SF 100)
+- Takes ~6 minutes (includes Rust compilation)
+
+---
+
+## Local Generation Details
+
+### Prerequisites
+
+1. **Install Rust and tpchgen-cli:**
+   ```bash
+   # Install Rust
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source $HOME/.cargo/env
+
+   # Install tpchgen-cli
+   cargo install tpchgen-cli
+   ```
+
+2. **Python dependencies:**
+   ```bash
+   pip install boto3 python-dotenv
+   ```
+
+3. **AWS credentials in `.env`:**
+   ```
+   AWS_ACCESS_KEY_ID=...
+   AWS_SECRET_ACCESS_KEY=...
+   AWS_SESSION_TOKEN=...
+   AWS_REGION=eu-central-1
+   S3_BUCKET_NAME=your-bucket
+   ```
+
+### Usage
 
 ```bash
-python -m src.generation.generate_tpch_data --scale-factor 100
+# Generate and upload to S3
+python -m src.generation.generate_tpch_data_fast --scale-factor 10
+
+# Generate only (no S3 upload)
+python -m src.generation.generate_tpch_data_fast --scale-factor 10 --local-only
+
+# Custom output directory
+python -m src.generation.generate_tpch_data_fast --scale-factor 10 --output-dir /tmp/tpch
 ```
 
-Generate a specific table only:
+### How It Works
+
+1. Uses `tpchgen_wrapper.py` to call tpchgen-cli binary
+2. Generates Parquet files in `data/tpch-sf{scale_factor}/`
+3. Uploads to S3 at `s3://{bucket}/tpch-sf{scale_factor}/`
+
+### Performance
+
+| Scale Factor | Data Size | Generation Time | Upload Time (50 Mbps) |
+|--------------|-----------|-----------------|----------------------|
+| SF 1         | 360 MB    | ~1 second       | ~1 minute            |
+| SF 10        | 3.6 GB    | ~6 seconds      | ~10 minutes          |
+| SF 100       | 38 GB     | ~60 seconds     | ~100 minutes         |
+
+---
+
+## EC2 Generation Details
+
+### Prerequisites
+
+1. **AWS credentials in `.env`:**
+   ```
+   AWS_ACCESS_KEY_ID=...
+   AWS_SECRET_ACCESS_KEY=...
+   AWS_SESSION_TOKEN=...
+   AWS_REGION=eu-central-1
+   S3_BUCKET_NAME=your-bucket
+   ```
+
+2. **Python dependencies:**
+   ```bash
+   pip install boto3 python-dotenv
+   ```
+
+### Usage
 
 ```bash
-python -m src.generation.generate_tpch_data --scale-factor 10 --table lineitem
+# Generate SF 100 on EC2
+python -m src.generation.generate_on_ec2 --scale-factor 100
+
+# Custom bucket
+python -m src.generation.generate_on_ec2 --scale-factor 100 --bucket my-bucket
+
+# Different region
+python -m src.generation.generate_on_ec2 --scale-factor 100 --region us-east-1
 ```
 
-Specify custom S3 bucket and prefix:
+### How It Works
 
-```bash
-python -m src.generation.generate_tpch_data \
-    --scale-factor 10 \
-    --bucket my-custom-bucket \
-    --prefix my-custom-prefix
-```
+1. **Launches EC2 instance** (c6i.2xlarge with 50GB EBS)
+2. **Creates IAM role** with S3 and SSM permissions
+3. **Installs Rust + tpchgen-cli** (~4 minutes via cargo)
+4. **Generates TPC-H data** (~6 seconds for SF 10, ~60s for SF 100)
+5. **Uploads to S3** (~30 seconds via 10+ Gbps internal network)
+6. **Terminates instance** (automatic cleanup)
 
-Enable verbose logging:
+### Performance
 
-```bash
-python -m src.generation.generate_tpch_data --scale-factor 10 --verbose
-```
+| Scale Factor | Data Size | Total Time | Cost (c6i.2xlarge) |
+|--------------|-----------|------------|--------------------|
+| SF 1         | 360 MB    | ~5 min     | $0.04              |
+| SF 10        | 3.6 GB    | ~5 min     | $0.04              |
+| SF 100       | 38 GB     | ~6 min     | $0.20              |
 
-### Python API
+### Instance Type Choice
 
-```python
-from src.generation.tpch_generator import TPCHGenerator
+The script uses **c6i.2xlarge** (8 vCPU, 16GB RAM) because:
+- Faster CPU = Faster Rust compilation (~4 min vs ~10 min on t3.medium)
+- More memory for large scale factors
+- Still cost-effective (~$0.17/hour)
 
-# Initialize generator
-generator = TPCHGenerator(
-    scale_factor=10,
-    s3_bucket="my-bucket",
-    s3_prefix="tpch-data"
-)
+---
 
-# Generate all tables
-generator.generate_all_tables()
+## Architecture
 
-# Or generate a specific table
-generator.generate_table("customer")
-
-# Generate lineitem with partitioning
-generator.generate_table("lineitem", partition_by="l_shipdate")
-
-# Clean up
-generator.close()
-```
-
-Using context manager (recommended):
-
-```python
-from src.generation.tpch_generator import TPCHGenerator
-
-with TPCHGenerator(10, "my-bucket", "tpch-data") as generator:
-    generator.generate_all_tables()
-# Connection automatically closed
-```
-
-## Output Structure
-
-The generator creates the following S3 structure:
+### File Structure
 
 ```
-s3://bucket/tpch-sf10/
-  ├── customer/
-  │   └── data.parquet
-  ├── lineitem/
-  │   ├── year=1992/month=01/data.parquet
-  │   ├── year=1992/month=02/data.parquet
-  │   └── ...
-  ├── nation/
-  │   └── data.parquet
-  ├── orders/
-  │   └── data.parquet
-  ├── part/
-  │   └── data.parquet
-  ├── partsupp/
-  │   └── data.parquet
-  ├── region/
-  │   └── data.parquet
-  └── supplier/
-      └── data.parquet
+src/generation/
+├── README.md                      # This file
+├── generate_tpch_data_fast.py     # Local generation script
+├── generate_on_ec2.py             # EC2 generation script
+├── tpchgen_wrapper.py             # Python wrapper for tpchgen-cli
+└── __init__.py
 ```
 
-Note: The `lineitem` table is partitioned by year and month for realistic data lake scenarios.
+### tpchgen-rs
 
-## TPC-H Tables
+Both methods use [tpchgen-rs](https://github.com/clflushopt/tpchgen-rs), a fast Rust implementation of TPC-H data generation.
 
-The generator creates all 8 standard TPC-H tables:
+**Why tpchgen-rs?**
+- 20x faster than DuckDB's dbgen
+- Constant memory usage (~2GB regardless of scale factor)
+- Native Parquet output
+- No compilation needed (uses pre-built binary locally)
 
-| Table | Rows (SF=10) | Description |
-|-------|--------------|-------------|
-| customer | 150,000 | Customer information |
-| lineitem | 6,000,000 | Order line items (partitioned) |
-| nation | 25 | Nation definitions |
-| orders | 1,500,000 | Order information |
-| part | 200,000 | Part information |
-| partsupp | 800,000 | Part supplier relationships |
-| region | 5 | Region definitions |
-| supplier | 10,000 | Supplier information |
+**Performance comparison (SF 10):**
+- DuckDB dbgen: 30+ minutes, 10-12GB memory
+- tpchgen-rs: 6 seconds, 2GB memory
 
-## Performance
-
-Generation times (approximate):
-
-- **SF 10 (~10GB)**: 5-10 minutes
-- **SF 100 (~100GB)**: 30-60 minutes
-
-Times vary based on:
-- Network bandwidth to S3
-- DuckDB performance
-- Compression settings
+---
 
 ## Troubleshooting
 
-### DuckDB Extension Errors
+### Local Generation Issues
 
-If you see errors about missing extensions:
+**Issue: `tpchgen-cli: command not found`**
+
+Solution:
+```bash
+# Ensure Rust is installed
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+
+# Install tpchgen-cli
+cargo install tpchgen-cli
+
+# Verify installation
+tpchgen-cli --version
+```
+
+**Issue: Slow S3 upload**
+
+Solution: Use EC2 generation for large scale factors (SF ≥ 10)
+
+### EC2 Generation Issues
+
+**Issue: IAM permissions error**
+
+Solution: The script automatically creates IAM roles. If it fails, ensure your AWS credentials have IAM permissions:
+- `iam:CreateRole`
+- `iam:AttachRolePolicy`
+- `iam:CreateInstanceProfile`
+
+**Issue: Session token expired**
+
+Solution: Refresh AWS credentials in `.env` file:
+```bash
+# Get new credentials from AWS console or CLI
+# Update .env file with new values
+```
+
+**Issue: Instance still running**
+
+Check and terminate manually:
+```bash
+python3 << 'EOF'
+import boto3
+from dotenv import load_dotenv
+load_dotenv('.env')
+
+ec2 = boto3.client('ec2', region_name='eu-central-1')
+response = ec2.describe_instances(
+    Filters=[
+        {'Name': 'tag:Name', 'Values': ['tpch-sf*']},
+        {'Name': 'instance-state-name', 'Values': ['running']}
+    ]
+)
+
+for r in response['Reservations']:
+    for i in r['Instances']:
+        instance_id = i['InstanceId']
+        print(f"Terminating: {instance_id}")
+        ec2.terminate_instances(InstanceIds=[instance_id])
+EOF
+```
+
+### Verify S3 Data
 
 ```bash
-# Install DuckDB extensions manually
-python -c "import duckdb; conn = duckdb.connect(); conn.execute('INSTALL tpch'); conn.execute('INSTALL httpfs')"
+python3 << 'EOF'
+import boto3
+from dotenv import load_dotenv
+load_dotenv('.env')
+
+s3 = boto3.client('s3', region_name='eu-central-1')
+response = s3.list_objects_v2(Bucket='your-bucket', Prefix='tpch-sf10/')
+
+if 'Contents' in response:
+    total = sum(obj['Size'] for obj in response['Contents'])
+    print(f"✅ {len(response['Contents'])} files, {total/1024/1024:.1f} MB")
+    for obj in response['Contents']:
+        print(f"  {obj['Key']}")
+else:
+    print("❌ No files found")
+EOF
 ```
 
-### S3 Permission Errors
+---
 
-Ensure your AWS credentials have the following permissions:
+## Decision Guide
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::your-bucket/*",
-        "arn:aws:s3:::your-bucket"
-      ]
-    }
-  ]
-}
-```
+**Use Local Generation when:**
+- Scale factor ≤ 10
+- You have good network (>50 Mbps upload)
+- You have enough memory (SF 10 = ~2GB)
+- You want immediate results
 
-### Memory Issues
+**Use EC2 Generation when:**
+- Scale factor ≥ 10
+- Slow local network
+- Limited local memory
+- You need fast S3 upload
 
-For large scale factors (SF 100+), ensure you have sufficient memory:
+---
 
-- Minimum: 8GB RAM
-- Recommended: 16GB+ RAM
+## Cost Analysis
 
-## Testing
+### Local Generation
+- **Compute**: Free (uses local machine)
+- **S3 Upload**: Data transfer costs (varies by region)
+- **Total**: ~$0.01 per GB uploaded
 
-Run unit tests:
+### EC2 Generation
+- **Compute**: c6i.2xlarge @ $0.17/hour
+- **S3 Upload**: Free (internal AWS network)
+- **Total**: ~$0.04 for SF 10, ~$0.20 for SF 100
 
-```bash
-pytest tests/test_tpch_generator.py -v
-```
+**Recommendation**: For SF ≥ 10, EC2 is more cost-effective due to fast upload.
 
-Run with coverage:
-
-```bash
-pytest tests/test_tpch_generator.py --cov=src.generation --cov-report=html
-```
-
-## Implementation Details
-
-### DuckDB Integration
-
-The generator uses DuckDB's built-in TPC-H extension:
-
-```python
-conn.execute("INSTALL tpch")
-conn.execute("LOAD tpch")
-conn.execute(f"CALL dbgen(sf={scale_factor})")
-```
-
-### S3 Direct Write
-
-Data is written directly to S3 without intermediate local storage:
-
-```python
-conn.execute(f"""
-    COPY {table_name}
-    TO 's3://bucket/prefix/{table_name}'
-    (FORMAT PARQUET, COMPRESSION 'snappy')
-""")
-```
-
-### Hive-Style Partitioning
-
-The lineitem table is partitioned by year and month:
-
-```python
-conn.execute(f"""
-    COPY (
-        SELECT
-            *,
-            YEAR(l_shipdate) as year,
-            MONTH(l_shipdate) as month
-        FROM lineitem
-        ORDER BY l_shipdate  -- CRITICAL: Enables zone map optimization
-    )
-    TO 's3://bucket/prefix/lineitem'
-    (FORMAT PARQUET, PARTITION_BY (year, month), COMPRESSION 'snappy')
-""")
-```
-
-This creates a structure like: `lineitem/year=1995/month=03/data.parquet`
-
-### Zone Map Optimization
-
-**Important**: The data is sorted by the partition column before writing. This enables DuckDB's zone map optimization, which tracks min/max values in Parquet metadata. This can improve query performance by **30%+ for filtered scans**.
-
-Reference: [Processing 1TB with DuckDB in 30 seconds](https://blog.dataexpert.io/p/i-processed-1-tb-with-duckdb-in-30)
-
-When querying with filters like `WHERE l_shipdate > '1995-03-15'`, DuckDB can skip entire Parquet files by checking the zone map metadata, dramatically reducing I/O.
+---
 
 ## References
 
+- [tpchgen-rs GitHub](https://github.com/clflushopt/tpchgen-rs)
 - [TPC-H Benchmark Specification](http://www.tpc.org/tpch/)
-- [DuckDB TPC-H Extension](https://duckdb.org/docs/extensions/tpch.html)
-- [DuckDB S3 Integration](https://duckdb.org/docs/extensions/httpfs.html)
+- [AWS EC2 Pricing](https://aws.amazon.com/ec2/pricing/)

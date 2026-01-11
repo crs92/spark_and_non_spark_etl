@@ -27,55 +27,70 @@ Tasks are written to **adapt and extend** existing code rather than create from 
   - Test that TPC-H environment variables can be loaded
   - _Requirements: 6.2_
 
-- [x] 2. Implement TPC-H data generator
-  - [x] 2.1 Create TPCHGenerator class with DuckDB integration
-    - Initialize DuckDB connection with S3 extension
-    - Implement generate_table() method for single table generation
-    - Implement generate_all_tables() method for complete dataset
-    - Add progress logging for each table
-    - _Requirements: 1.1, 1.5_
+- [x] 2. Implement TPC-H data generator using tpchgen-rs
+  - [x] 2.1 Create Python wrapper for tpchgen-rs CLI
+    - Check if tpchgen-cli is installed (cargo install tpchgen-cli)
+    - Execute tpchgen-cli with scale factor and output directory
+    - Capture stdout/stderr for progress logging
+    - Handle errors if tpchgen-cli is not found
+    - Provide clear installation instructions if missing
+    - **Implementation**: `src/generation/tpchgen_wrapper.py`
+    - _Requirements: 1.1, 1.6, 1.8_
 
-  - [ ]* 2.2 Write property test for TPC-H table generation completeness
+  - [ ]* 2.2 Write property test for tpchgen-rs execution
     - **Property 1: TPC-H Table Generation Completeness**
     - **Validates: Requirements 1.1**
 
-  - [x] 2.3 Implement Parquet output to S3
-    - Configure DuckDB S3 extension with AWS credentials
-    - Write tables as Parquet with Snappy compression
-    - Verify files are written to correct S3 paths
-    - _Requirements: 1.2, 9.2_
+  - [x] 2.3 Implement local Parquet generation with streaming
+    - Use tpchgen-cli --format=parquet to generate files locally
+    - Verify all 8 tables are generated
+    - Log generation time and file sizes
+    - Ensure constant memory usage (~2GB) regardless of scale factor
+    - **Implementation**: `src/generation/generate_tpch_data_fast.py` (local generation)
+    - _Requirements: 1.2, 1.6_
 
   - [ ]* 2.4 Write property test for Parquet output
-    - **Property 2: Parquet Output to S3**
+    - **Property 2: Parquet Output Validation**
     - **Validates: Requirements 1.2**
 
-  - [ ]* 2.5 Write property test for Parquet compression
-    - **Property 25: Parquet Compression**
-    - **Validates: Requirements 9.2**
+  - [x] 2.5 Implement S3 upload using AWS CLI
+    - Use aws s3 sync to upload generated Parquet files to S3
+    - Maintain directory structure during upload
+    - Show upload progress for large files
+    - Clean up local files after successful upload (unless --keep-local flag)
+    - **Implementation**: Integrated in both `generate_tpch_data_fast.py` and `generate_on_ec2.py`
+    - _Requirements: 1.3, 1.7_
 
-  - [x] 2.6 Implement lineitem table partitioning
-    - Extract year and month from l_shipdate
-    - Create Hive-style partitioned structure (year=YYYY/month=MM)
-    - Write partitioned Parquet files to S3
-    - _Requirements: 1.3, 9.1, 9.3_
+  - [ ]* 2.6 Write property test for S3 upload
+    - **Property 3: S3 Upload Completeness**
+    - **Validates: Requirements 1.3**
 
-  - [ ]* 2.7 Write property test for lineitem partitioning
-    - **Property 3: Lineitem Partitioning Structure**
-    - **Validates: Requirements 1.3, 9.1, 9.3**
-
-  - [x] 2.8 Add scale factor configuration
-    - Support SF 10 and SF 100 via command-line argument
+  - [x] 2.7 Add scale factor configuration
+    - Support SF 10 (~6 seconds) and SF 100 (~45 seconds) via command-line argument
     - Validate scale factor is positive integer
-    - Log dataset size after generation
+    - Log dataset size and generation time
+    - **Implementation**: Both scripts support `--scale-factor` argument
     - _Requirements: 1.4_
 
-  - [ ]* 2.9 Write property test for scale factor support
+  - [ ]* 2.8 Write property test for scale factor support
     - **Property 4: Scale Factor Support**
     - **Validates: Requirements 1.4**
 
-  - [ ]* 2.10 Write property test for generation logging
+  - [ ]* 2.9 Write property test for generation logging
     - **Property 5: Generation Progress Logging**
-    - **Validates: Requirements 1.5_
+    - **Validates: Requirements 1.5**
+
+  - [ ]* 2.10 Write property test for constant memory usage
+    - **Property 6: Constant Memory Usage**
+    - **Validates: Requirements 1.6**
+
+  - [x] 2.11 Implement EC2-based generation for large scale factors
+    - Launch EC2 instance with appropriate resources
+    - Install Rust and tpchgen-cli on EC2
+    - Generate data on EC2 and upload to S3 via fast internal network
+    - Automatic instance termination and cleanup
+    - **Implementation**: `src/generation/generate_on_ec2.py`
+    - _Requirements: 1.3, 1.4, 1.7_
 
 - [ ] 3. Checkpoint - Verify data generation
   - Run generator with SF 10 and verify all tables created
