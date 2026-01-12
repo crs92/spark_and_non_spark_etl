@@ -1,6 +1,6 @@
 # Production Spark ETL Dockerfile for EKS with Pod Identity
 # Extends official Spark 3.5.7 image with AWS S3 support
-FROM apache/spark:3.5.7-python3
+FROM docker.io/apache/spark:3.5.7-python3
 
 USER root
 
@@ -13,7 +13,8 @@ RUN curl -fsSL https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4
          -o /opt/spark/jars/aws-java-sdk-bundle-1.12.770.jar
 
 # Copy ETL application
-COPY --chown=spark:spark src/etl/spark_etl_nyc_taxi_k8s.py /opt/spark/work-dir/
+# COPY --chown=spark:spark src/etl/spark_etl_nyc_taxi_k8s.py /opt/spark/work-dir/
+COPY --chown=spark:spark src/etl/spark_etl_tpch.py /opt/spark/work-dir/
 
 USER 185
 WORKDIR /opt/spark/work-dir

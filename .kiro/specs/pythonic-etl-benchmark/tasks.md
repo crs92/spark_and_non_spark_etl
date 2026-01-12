@@ -92,19 +92,23 @@ Tasks are written to **adapt and extend** existing code rather than create from 
     - **Implementation**: `src/generation/generate_on_ec2.py`
     - _Requirements: 1.3, 1.4, 1.7_
 
-- [ ] 3. Checkpoint - Verify data generation
+- [x] 3. Checkpoint - Verify data generation
   - Run generator with SF 10 and verify all tables created
   - Check S3 structure matches expected layout
   - Ensure all tests pass, ask the user if questions arise
 
-- [ ] 4. Implement PySpark ETL baseline
-  - [ ] 4.1 Create SparkETLJob class
-    - Initialize SparkSession with S3 configuration
-    - Implement load_tables() to read Parquet from S3
+- [x] 4. Adapt existing PySpark ETL for TPC-H benchmark
+  - [x] 4.1 Create SparkETLTPCH class (adapt from spark_etl_nyc_taxi_k8s.py)
+    - Copy existing Spark ETL structure and Kubernetes compatibility
+    - Update to read TPC-H Parquet tables from S3 instead of NYC Taxi data
     - Validate table schemas match TPC-H specification
+    - Reuse existing Spark session configuration (already works with Spark Operator)
+    - **Base implementation**: `src/etl/spark_etl_nyc_taxi_k8s.py` (already working)
+    - **New file**: `src/etl/spark_etl_tpch.py`
     - _Requirements: 2.1_
 
-  - [ ] 4.2 Implement TPC-H Query 3 (Shipping Priority)
+  - [x] 4.2 Implement TPC-H Query 3 (Shipping Priority)
+    - Replace NYC Taxi aggregations with TPC-H Query 3 logic
     - Join customer, orders, and lineitem tables
     - Apply filters: c_mktsegment, o_orderdate, l_shipdate
     - Aggregate by l_orderkey with revenue calculation
@@ -115,18 +119,21 @@ Tasks are written to **adapt and extend** existing code rather than create from 
     - **Property 6: Query Result Equivalence**
     - **Validates: Requirements 2.2**
 
-  - [ ] 4.4 Implement PerformanceTracker class
+  - [x] 4.4 Adapt PerformanceTracker for TPC-H metrics
+    - Reuse existing metadata collection pattern from NYC Taxi ETL
     - Track startup time (job submission to execution start)
     - Track execution time (data read to result write)
     - Track peak memory usage via Spark metrics
     - Track bytes read and written from S3
+    - Output metrics in same JSON format as NYC Taxi version
     - _Requirements: 2.3, 8.1, 8.2, 8.3, 8.4_
 
   - [ ]* 4.5 Write property test for complete metrics collection
     - **Property 7: Complete Metrics Collection**
     - **Validates: Requirements 2.3, 3.6, 8.1, 8.2, 8.3, 8.4**
 
-  - [ ] 4.6 Write results and metrics to S3
+  - [x] 4.6 Write results and metrics to S3
+    - Reuse existing S3 write pattern from NYC Taxi ETL
     - Write query results as Parquet
     - Write metrics as JSON with all required fields
     - _Requirements: 2.5, 8.5_
@@ -135,10 +142,13 @@ Tasks are written to **adapt and extend** existing code rather than create from 
     - **Property 8: Metrics Persistence**
     - **Validates: Requirements 8.5**
 
-  - [ ] 4.8 Create SparkApplication Kubernetes manifest
-    - Define SparkApplication CRD for Spark Operator
-    - Configure executor count and resources
-    - Set up Pod Identity Association for S3 access
+  - [x] 4.8 Adapt SparkApplication Kubernetes manifest for TPC-H
+    - Copy existing EKS/Spark Operator configuration (already working)
+    - Update application name and arguments for TPC-H
+    - Adjust executor count and resources for TPC-H workload
+    - Verify Pod Identity Association for S3 access still works
+    - **Base infrastructure**: `terraform/` modules (already deployed and working)
+    - **New manifest**: `k8s/spark-tpch-job.yaml`
     - _Requirements: 2.4_
 
 - [ ] 5. Implement Polars + DuckDB ETL challenger

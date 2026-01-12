@@ -1,0 +1,143 @@
+---
+# SparkApplication for TPC-H Benchmark - Scale Factor 10 (SMALL NODES)
+# Optimized for 2x m6i.large nodes (2 vCPU, 8GB each)
+# Configuration: 1 core driver + 2 executors with 1 core each = 3 cores total
+
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-tpch-sf10-small
+  namespace: default
+  labels:
+    app: spark-etl
+    dataset: tpch
+    data-size: sf10
+    benchmark: pythonic-etl
+    cost-tracking: enabled
+    version: v1
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+
+  # Container image from ECR
+  image: "764738119924.dkr.ecr.eu-central-1.amazonaws.com/spark-etl:latest"
+  imagePullPolicy: Always
+
+  # Main Python application file
+  mainApplicationFile: "local:///opt/spark/work-dir/spark_etl_tpch.py"
+
+  # Arguments for TPC-H ETL - Scale Factor 10
+  arguments:
+    - "--scale-factor"
+    - "10"
+    - "--output"
+    - "/tmp/output"
+    - "--s3-input"
+    - "s3://ccorsetti/tpch-sf10"
+    - "--s3-output"
+    - "s3://ccorsetti/results"
+
+  # Spark version
+  sparkVersion: "3.5.0"
+
+  # Spark configuration optimized for small nodes
+  sparkConf:
+    # S3A Configuration for Pod Identity
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+    "spark.hadoop.fs.s3a.endpoint.region": "eu-central-1"
+    "spark.driver.extraClassPath": "/opt/spark/jars/hadoop-aws-3.3.4.jar:/opt/spark/jars/aws-java-sdk-bundle-1.12.770.jar"
+    "spark.executor.extraClassPath": "/opt/spark/jars/hadoop-aws-3.3.4.jar:/opt/spark/jars/aws-java-sdk-bundle-1.12.770.jar"
+    "spark.hadoop.fs.s3a.fast.upload": "true"
+    "spark.hadoop.fs.s3a.block.size": "128M"
+    "spark.hadoop.fs.s3a.multipart.size": "128M"
+    "spark.hadoop.fs.s3a.connection.maximum": "50"
+
+    # Performance tuning for small cluster
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.sql.files.maxPartitionBytes": "134217728"  # 128MB
+    "spark.sql.shuffle.partitions": "10"  # Reduced for small cluster
+    "spark.default.parallelism": "4"
+
+    # Memory management
+    "spark.memory.fraction": "0.8"
+    "spark.memory.storageFraction": "0.3"
+    "spark.executor.memoryOverhead": "512"
+
+    # Serialization
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer"
+
+    # Parquet optimization
+    "spark.sql.parquet.compression.codec": "snappy"
+    "spark.sql.parquet.filterPushdown": "true"
+    "spark.sql.parquet.mergeSchema": "false"
+
+    # Join optimization
+    "spark.sql.autoBroadcastJoinThreshold": "10485760"  # 10MB
+    "spark.sql.join.preferSortMergeJoin": "true"
+
+  # Hadoop configuration
+  hadoopConf:
+    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "fs.s3a.aws.credentials.provider": "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+
+  # Driver configuration - REDUCED for small nodes
+  driver:
+    cores: 1
+    coreLimit: "1000m"
+    memory: "2g"
+
+    # ServiceAccount with Pod Identity
+    serviceAccount: spark-sa
+
+    labels:
+      version: "3.5.0"
+      app: spark-tpch-driver
+      workload: etl
+      data-size: sf10
+      cost-center: benchmark
+      query: query3
+
+    env:
+      - name: AWS_REGION
+        value: "eu-central-1"
+      - name: PYTHONPATH
+        value: "/app"
+      - name: BENCHMARK_NAME
+        value: "tpch-query3-sf10-small"
+      - name: DATA_SIZE
+        value: "sf10"
+
+  # Executor configuration - REDUCED: 2 executors, 1 core each
+  executor:
+    cores: 1
+    coreLimit: "1000m"
+    memory: "2g"
+    instances: 2  # Only 2 executors for small nodes
+
+    labels:
+      version: "3.5.0"
+      app: spark-tpch-executor
+      workload: etl
+      data-size: sf10
+      cost-center: benchmark
+      query: query3
+
+    env:
+      - name: AWS_REGION
+        value: "eu-central-1"
+      - name: PYTHONPATH
+        value: "/app"
+
+  # Dynamic allocation disabled
+  dynamicAllocation:
+    enabled: false
+
+  # Restart policy
+  restartPolicy:
+    type: Never
+
+  # Cleanup after 1 hour
+  timeToLiveSeconds: 3600

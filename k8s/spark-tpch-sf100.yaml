@@ -1,0 +1,149 @@
+---
+# SparkApplication for TPC-H Benchmark - Scale Factor 100
+# Dataset: TPC-H SF100 (~100GB, 600M lineitem records)
+# Configuration: 8 executors, 4 cores, 8GB each
+# Use case: TPC-H Query 3 benchmark at scale
+
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-tpch-sf100
+  namespace: default
+  labels:
+    app: spark-etl
+    dataset: tpch
+    data-size: sf100
+    benchmark: pythonic-etl
+    cost-tracking: enabled
+    version: v1
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+
+  # Container image from ECR (working Pod Identity configuration)
+  image: "764738119924.dkr.ecr.eu-central-1.amazonaws.com/spark-etl:latest"
+  imagePullPolicy: Always
+
+  # Main Python application file (included in container image)
+  mainApplicationFile: "local:///opt/spark/work-dir/spark_etl_tpch.py"
+
+  # Arguments for TPC-H ETL - Scale Factor 100
+  arguments:
+    - "--scale-factor"
+    - "100"
+    - "--output"
+    - "/tmp/output"
+    - "--s3-input"
+    - "s3://etl-benchmark-data-764738119924/tpch-sf100"
+    - "--s3-output"
+    - "s3://etl-benchmark-data-764738119924/results"
+
+  # Spark version
+  sparkVersion: "3.5.0"
+
+  # Spark configuration optimized for TPC-H SF100 with Pod Identity
+  sparkConf:
+    # S3A Configuration for Pod Identity
+    "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+    "spark.hadoop.fs.s3a.endpoint.region": "eu-central-1"
+    "spark.driver.extraClassPath": "/opt/spark/jars/hadoop-aws-3.3.4.jar:/opt/spark/jars/aws-java-sdk-bundle-1.12.770.jar"
+    "spark.executor.extraClassPath": "/opt/spark/jars/hadoop-aws-3.3.4.jar:/opt/spark/jars/aws-java-sdk-bundle-1.12.770.jar"
+    "spark.hadoop.fs.s3a.fast.upload": "true"
+    "spark.hadoop.fs.s3a.block.size": "128M"
+    "spark.hadoop.fs.s3a.multipart.size": "128M"
+    "spark.hadoop.fs.s3a.connection.maximum": "100"
+
+    # Performance tuning for TPC-H SF100 (~100GB)
+    "spark.sql.adaptive.enabled": "true"
+    "spark.sql.adaptive.coalescePartitions.enabled": "true"
+    "spark.sql.adaptive.skewJoin.enabled": "true"
+    "spark.sql.files.maxPartitionBytes": "134217728"  # 128MB
+    "spark.sql.shuffle.partitions": "200"  # Increased for SF100
+    "spark.default.parallelism": "64"
+
+    # Memory management for larger dataset
+    "spark.memory.fraction": "0.8"
+    "spark.memory.storageFraction": "0.3"
+    "spark.executor.memoryOverhead": "2048"
+
+    # Serialization
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer"
+
+    # Parquet optimization
+    "spark.sql.parquet.compression.codec": "snappy"
+    "spark.sql.parquet.filterPushdown": "true"
+    "spark.sql.parquet.mergeSchema": "false"
+
+    # Join optimization for TPC-H Query 3
+    "spark.sql.autoBroadcastJoinThreshold": "10485760"  # 10MB
+    "spark.sql.join.preferSortMergeJoin": "true"
+
+    # Shuffle optimization
+    "spark.shuffle.compress": "true"
+    "spark.shuffle.spill.compress": "true"
+
+  # Hadoop configuration
+  hadoopConf:
+    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    "fs.s3a.aws.credentials.provider": "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+
+  # Driver configuration
+  driver:
+    cores: 4
+    coreLimit: "4000m"
+    memory: "8g"
+
+    # ServiceAccount with Pod Identity (no annotations needed!)
+    serviceAccount: spark-sa
+
+    labels:
+      version: "3.5.0"
+      app: spark-tpch-driver
+      workload: etl
+      data-size: sf100
+      cost-center: benchmark
+      query: query3
+
+    env:
+      - name: AWS_REGION
+        value: "eu-central-1"
+      - name: PYTHONPATH
+        value: "/app"
+      - name: BENCHMARK_NAME
+        value: "tpch-query3-sf100"
+      - name: DATA_SIZE
+        value: "sf100"
+
+  # Executor configuration - 8 executors for SF100
+  executor:
+    cores: 4
+    coreLimit: "4000m"
+    memory: "8g"
+    instances: 8  # Fixed for consistent benchmarking
+
+    labels:
+      version: "3.5.0"
+      app: spark-tpch-executor
+      workload: etl
+      data-size: sf100
+      cost-center: benchmark
+      query: query3
+
+    env:
+      - name: AWS_REGION
+        value: "eu-central-1"
+      - name: PYTHONPATH
+        value: "/app"
+
+  # Dynamic allocation disabled for consistent benchmarking
+  dynamicAllocation:
+    enabled: false
+
+  # Restart policy
+  restartPolicy:
+    type: Never
+
+  # Cleanup after 2 hours
+  timeToLiveSeconds: 7200
