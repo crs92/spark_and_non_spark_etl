@@ -151,14 +151,14 @@ Tasks are written to **adapt and extend** existing code rather than create from 
     - **New manifest**: `k8s/spark-tpch-job.yaml`
     - _Requirements: 2.4_
 
-- [ ] 5. Implement Polars + DuckDB ETL challenger
-  - [ ] 5.1 Create PolarsETLJob class for TPC-H (adapt from existing PolarsNYCTaxiETL)
+- [x] 5. Implement Polars + DuckDB ETL challenger
+  - [x] 5.1 Create PolarsETLJob class for TPC-H (adapt from existing PolarsNYCTaxiETL)
     - Initialize DuckDB connection with httpfs extension
     - Configure S3 credentials for DuckDB
     - Reuse existing PipelineTimer for performance tracking
     - _Requirements: 3.1_
 
-  - [ ] 5.2 Implement query with predicate pushdown
+  - [x] 5.2 Implement query with predicate pushdown
     - Use DuckDB to apply filters at storage layer
     - Measure bytes read with and without pushdown
     - Log pushdown efficiency metrics
@@ -168,7 +168,7 @@ Tasks are written to **adapt and extend** existing code rather than create from 
     - **Property 9: Predicate Pushdown Efficiency**
     - **Validates: Requirements 3.2, 9.5**
 
-  - [ ] 5.4 Implement query with projection pushdown
+  - [x] 5.4 Implement query with projection pushdown
     - Use DuckDB to select only required columns
     - Measure bytes read with and without projection
     - Log projection efficiency metrics
@@ -178,34 +178,34 @@ Tasks are written to **adapt and extend** existing code rather than create from 
     - **Property 10: Projection Pushdown Efficiency**
     - **Validates: Requirements 3.3**
 
-  - [ ] 5.6 Implement zero-copy handoff to Polars
+  - [x] 5.6 Implement zero-copy handoff to Polars
     - Execute DuckDB query to get relation object
     - Use duckdb_rel.pl() for zero-copy transfer
     - Verify no serialization occurs
     - _Requirements: 3.4_
 
-  - [ ] 5.7 Implement Polars streaming mode
+  - [x] 5.7 Implement Polars streaming mode
     - Use pl.scan_parquet() for lazy evaluation
     - Apply transformations (filter, group_by, agg)
     - Use .collect(streaming=True) for out-of-core processing
     - _Requirements: 3.5_
 
-  - [ ] 5.8 Implement TPC-H Query 3 logic
+  - [x] 5.8 Implement TPC-H Query 3 logic
     - Match PySpark query exactly (same filters, joins, aggregations)
     - Verify results match PySpark output
     - _Requirements: 2.2_
 
-  - [ ] 5.9 Adapt performance tracking from existing PipelineTimer
+  - [x] 5.9 Adapt performance tracking from existing PipelineTimer
     - Reuse timing_decorator.py infrastructure
     - Track same metrics as PySpark for fair comparison
     - _Requirements: 3.6_
 
-  - [ ] 5.10 Write results and metrics to S3
+  - [x] 5.10 Write results and metrics to S3
     - Write query results as Parquet using PyArrow
     - Write metrics as JSON (adapt existing metrics format)
     - _Requirements: 2.5, 8.5_
 
-  - [ ] 5.11 Create AWS Batch job definition
+  - [x] 5.11 Create AWS Batch job definition
     - Define Fargate task with configurable vCPU and memory
     - Set up IAM role for S3 access
     - Configure CloudWatch Logs integration

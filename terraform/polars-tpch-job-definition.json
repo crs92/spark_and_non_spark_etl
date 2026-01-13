@@ -1,0 +1,60 @@
+{
+  "jobDefinitionName": "polars-tpch-etl",
+  "type": "container",
+  "platformCapabilities": ["FARGATE"],
+  "containerProperties": {
+    "image": "<AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/polars-tpch-etl:latest",
+    "jobRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/BatchJobRole",
+    "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/BatchExecutionRole",
+    "resourceRequirements": [
+      {
+        "type": "VCPU",
+        "value": "4"
+      },
+      {
+        "type": "MEMORY",
+        "value": "16384"
+      }
+    ],
+    "environment": [
+      {
+        "name": "AWS_REGION",
+        "value": "us-east-1"
+      },
+      {
+        "name": "PYTHONUNBUFFERED",
+        "value": "1"
+      }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/aws/batch/polars-tpch-etl",
+        "awslogs-region": "us-east-1",
+        "awslogs-stream-prefix": "polars-tpch"
+      }
+    },
+    "fargatePlatformConfiguration": {
+      "platformVersion": "LATEST"
+    },
+    "networkConfiguration": {
+      "assignPublicIp": "ENABLED"
+    }
+  },
+  "retryStrategy": {
+    "attempts": 2,
+    "evaluateOnExit": [
+      {
+        "action": "RETRY",
+        "onStatusReason": "Task failed to start"
+      },
+      {
+        "action": "EXIT",
+        "onStatusReason": "*"
+      }
+    ]
+  },
+  "timeout": {
+    "attemptDurationSeconds": 3600
+  }
+}

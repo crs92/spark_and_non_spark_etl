@@ -1,0 +1,35 @@
+# Dockerfile for Polars + DuckDB TPC-H ETL on AWS Batch (Fargate)
+# This container runs the TPC-H benchmark using Polars and DuckDB
+
+FROM python:3.12-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY pyproject.toml ./
+
+# Install Python dependencies
+# Extract dependencies from pyproject.toml and install
+RUN pip install --no-cache-dir \
+    polars \
+    pyarrow \
+    duckdb \
+    boto3 \
+    psutil \
+    python-dotenv
+
+# Copy source code
+COPY src/ ./src/
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Default command (can be overridden by AWS Batch)
+ENTRYPOINT ["python", "-m", "src.etl.polars_etl_tpch"]

@@ -91,3 +91,30 @@ output "ec2_iam_role_arn" {
   description = "IAM role ARN for Polars EC2 instance"
   value       = module.ec2.iam_role_arn
 }
+
+# AWS Batch Outputs
+
+output "batch_job_queue_arn" {
+  description = "ARN of the Batch job queue"
+  value       = try(aws_batch_job_queue.polars_queue.arn, null)
+}
+
+output "batch_job_queue_name" {
+  description = "Name of the Batch job queue"
+  value       = try(aws_batch_job_queue.polars_queue.name, null)
+}
+
+output "batch_job_definition_arn" {
+  description = "ARN of the Batch job definition"
+  value       = try(aws_batch_job_definition.polars_tpch.arn, null)
+}
+
+output "batch_job_role_arn" {
+  description = "ARN of the Batch job role"
+  value       = try(aws_iam_role.batch_job_role.arn, null)
+}
+
+output "batch_cloudwatch_log_group" {
+  description = "CloudWatch log group for Batch jobs"
+  value       = try(aws_cloudwatch_log_group.batch_logs.name, null)
+}
