@@ -513,8 +513,11 @@ class PolarsETLTPCH:
         logger.info("Writing results to local: %s", local_results_path)
         df.write_parquet(local_results_path)
 
-        # Write to S3
-        s3_results_path = f"{self.s3_output_path}/polars/sf{self.scale_factor}/results_{timestamp}.parquet"
+        # Write to S3 (create directory structure first)
+        s3_results_dir = Path(self.s3_output_path) / "polars" / f"sf{self.scale_factor}"
+        s3_results_dir.mkdir(parents=True, exist_ok=True)
+        s3_results_path = str(s3_results_dir / f"results_{timestamp}.parquet")
+
         logger.info("Writing results to S3: %s", s3_results_path)
         df.write_parquet(s3_results_path)
 
