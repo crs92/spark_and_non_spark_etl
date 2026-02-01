@@ -14,6 +14,7 @@ dependencies = [
     "matplotlib",  # For benchmark report charts
     "python-pptx",  # For PowerPoint report generation
     "boto3",  # AWS SDK for Python
+    "kubernetes",  # Kubernetes Python client for Spark Operator
     "hypothesis",  # Property-based testing
     "python-dotenv",  # Load environment variables from .env files
 ]
