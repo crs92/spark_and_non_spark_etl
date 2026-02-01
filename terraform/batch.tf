@@ -173,8 +173,9 @@ resource "aws_batch_job_definition" "polars_tpch" {
   platform_capabilities = ["FARGATE"]
 
   container_properties = jsonencode({
-    image = "${module.ecr.repository_urls["polars-etl"]}:latest"
+    image = "${module.ecr.repository_urls["polars-tpch-etl"]}:latest"
 
+    # IAM roles for Fargate jobs - MUST be inside containerProperties
     jobRoleArn       = aws_iam_role.batch_job_role.arn
     executionRoleArn = aws_iam_role.batch_execution_role.arn
 
