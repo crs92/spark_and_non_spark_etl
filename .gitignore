@@ -6,3 +6,5 @@ __pycache__/
 *.log
 *.egg
 src/*.egg-info/
+# Environment variables
+.env
