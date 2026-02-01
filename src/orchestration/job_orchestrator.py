@@ -742,12 +742,12 @@ class JobOrchestrator:
             mapped_status = status_map.get(state, "PENDING")
 
         except ApiException as e:
-            if e.status != 404:
-                # Re-raise for other API exceptions
-                logger.error(f"Error getting Spark job status: {e}")
-                raise
-            logger.warning(f"Spark job {job_name} not found")
-            return {"status": "FAILED", "raw_state": "NOT_FOUND"}
+            if e.status == 404:
+                logger.warning(f"Spark job {job_name} not found")
+                return {"status": "FAILED", "raw_state": "NOT_FOUND"}
+            # Re-raise for other API exceptions
+            logger.error(f"Error getting Spark job status: {e}")
+            raise
         else:
             return {"status": mapped_status, "raw_state": state}
 
@@ -786,8 +786,7 @@ class JobOrchestrator:
         except Exception as e:
             logger.error(f"Error getting Batch job status: {e}")
             raise
-        else:
-            return {"status": mapped_status, "raw_state": status}
+        return {"status": mapped_status, "raw_state": status}
 
     def calculate_startup_latency(self, metrics: list[JobMetrics]) -> list[JobMetrics]:
         """Calculate startup latency for all jobs.
