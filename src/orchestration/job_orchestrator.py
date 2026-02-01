@@ -321,7 +321,7 @@ class JobOrchestrator:
             }
         if scale_factor <= 10:
             return {
-                "executor_count": 2,  # Reduced to fit in available nodes
+                "executor_count": 4,  # 4 executors fit in m6i.xlarge nodes
                 "executor_memory": "4g",
                 "driver_memory": "4g",
                 "batch_vcpu": 4,
