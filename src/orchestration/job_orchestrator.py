@@ -299,6 +299,43 @@ class JobOrchestrator:
         logger.info(f"Successfully submitted {len(submissions)} Spark jobs")
         return submissions
 
+    def _get_resource_config(self, scale_factor: int) -> dict[str, Any]:
+        """Get resource configuration based on scale factor.
+        
+        Returns matching resources for both Spark and Batch to ensure fair comparison.
+        With m6i.xlarge nodes (4 vCPU, 16GB), we can run larger jobs.
+        
+        Args:
+            scale_factor: TPC-H scale factor
+            
+        Returns:
+            Dictionary with resource configuration
+        """
+        if scale_factor == 1:
+            return {
+                "executor_count": 2,
+                "executor_memory": "4g",
+                "driver_memory": "2g",
+                "batch_vcpu": 4,
+                "batch_memory_gb": 8,
+            }
+        elif scale_factor <= 10:
+            return {
+                "executor_count": 4,
+                "executor_memory": "4g",
+                "driver_memory": "4g",
+                "batch_vcpu": 4,
+                "batch_memory_gb": 16,
+            }
+        else:  # scale_factor >= 100
+            return {
+                "executor_count": 8,
+                "executor_memory": "8g",
+                "driver_memory": "4g",
+                "batch_vcpu": 8,
+                "batch_memory_gb": 32,
+            }
+
     def _create_spark_application_manifest(
         self,
         job_name: str,
@@ -317,15 +354,12 @@ class JobOrchestrator:
         Returns:
             Dictionary representing SparkApplication manifest
         """
-        # Determine executor configuration based on scale factor
-        if scale_factor <= 10:
-            executor_count = 4
-            executor_memory = "4g"
-            driver_memory = "4g"
-        else:  # scale_factor >= 100
-            executor_count = 8
-            executor_memory = "8g"
-            driver_memory = "8g"
+        # Get resource configuration for this scale factor
+        resources = self._get_resource_config(scale_factor)
+        
+        executor_count = resources["executor_count"]
+        executor_memory = resources["executor_memory"]
+        driver_memory = resources["driver_memory"]
 
         # Get ECR image from environment or use default
         ecr_image = os.getenv(
@@ -410,8 +444,8 @@ class JobOrchestrator:
                     ),
                 },
                 "driver": {
-                    "cores": 1,  # Reduced from 2 to fit in nodes with 1.93 available
-                    "coreLimit": "1900m",  # Reduced to 1.9 cores
+                    "cores": 2 if scale_factor > 10 else 1,
+                    "coreLimit": "2000m" if scale_factor > 10 else "1000m",
                     "memory": driver_memory,
                     "serviceAccount": "spark-sa",
                     "labels": {
@@ -433,8 +467,8 @@ class JobOrchestrator:
                     ],
                 },
                 "executor": {
-                    "cores": 1,  # Reduced from 2 to fit in nodes
-                    "coreLimit": "1900m",  # Reduced to 1.9 cores
+                    "cores": 2 if scale_factor > 10 else 1,
+                    "coreLimit": "2000m" if scale_factor > 10 else "1000m",
                     "memory": executor_memory,
                     "instances": executor_count,
                     "labels": {

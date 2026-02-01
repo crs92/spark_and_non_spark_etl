@@ -17,11 +17,11 @@ import argparse
 import sys
 from pathlib import Path
 
+# Add src to path BEFORE importing from src
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from src.orchestration import JobOrchestrator
 from src.utils.logging_config import get_logger
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
@@ -131,9 +131,13 @@ def main() -> int:
 
         if not args.skip_batch:
             logger.info(f"\nSubmitting {args.batch_jobs} Batch jobs to AWS Batch...")
+            # Get matching resources for fair comparison
+            resources = orchestrator._get_resource_config(args.scale_factor)
             batch_submissions = orchestrator.submit_batch_jobs(
                 count=args.batch_jobs,
                 scale_factor=args.scale_factor,
+                vcpu=resources["batch_vcpu"],
+                memory_gb=resources["batch_memory_gb"],
             )
             all_submissions.extend(batch_submissions)
             logger.info(f"✓ Submitted {len(batch_submissions)} Batch jobs")

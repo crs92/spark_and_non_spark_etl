@@ -124,6 +124,39 @@ class PolarsETLTPCH:
             # Set S3 region if specified
             aws_region = os.getenv("AWS_REGION", "us-east-1")
             conn.execute(f"SET s3_region='{aws_region}';")
+            
+            # Enable S3 use_ssl (required for HTTPS)
+            conn.execute("SET s3_use_ssl=true;")
+            
+            # Try to get credentials from environment or use IAM role
+            access_key = os.getenv("AWS_ACCESS_KEY_ID")
+            secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+            session_token = os.getenv("AWS_SESSION_TOKEN")
+            
+            if access_key and secret_key:
+                # Use explicit credentials if provided
+                conn.execute(f"SET s3_access_key_id='{access_key}';")
+                conn.execute(f"SET s3_secret_access_key='{secret_key}';")
+                if session_token:
+                    conn.execute(f"SET s3_session_token='{session_token}';")
+                logger.info("DuckDB configured with explicit AWS credentials")
+            else:
+                # For AWS Batch/ECS, try to fetch credentials from metadata endpoint
+                try:
+                    import boto3
+                    session = boto3.Session()
+                    credentials = session.get_credentials()
+                    if credentials:
+                        conn.execute(f"SET s3_access_key_id='{credentials.access_key}';")
+                        conn.execute(f"SET s3_secret_access_key='{credentials.secret_key}';")
+                        if credentials.token:
+                            conn.execute(f"SET s3_session_token='{credentials.token}';")
+                        logger.info("DuckDB configured with IAM role credentials from boto3")
+                    else:
+                        logger.warning("No credentials found - S3 access may fail")
+                except Exception as e:
+                    logger.warning(f"Failed to fetch IAM credentials: {e}")
+                    logger.info("DuckDB will attempt to use default credential chain")
 
             logger.info("DuckDB configured with S3 access (region: %s)", aws_region)
 
