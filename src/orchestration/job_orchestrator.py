@@ -301,13 +301,13 @@ class JobOrchestrator:
 
     def _get_resource_config(self, scale_factor: int) -> dict[str, Any]:
         """Get resource configuration based on scale factor.
-        
+
         Returns matching resources for both Spark and Batch to ensure fair comparison.
         With m6i.xlarge nodes (4 vCPU, 16GB), we can run larger jobs.
-        
+
         Args:
             scale_factor: TPC-H scale factor
-            
+
         Returns:
             Dictionary with resource configuration
         """
@@ -319,22 +319,22 @@ class JobOrchestrator:
                 "batch_vcpu": 4,
                 "batch_memory_gb": 8,
             }
-        elif scale_factor <= 10:
+        if scale_factor <= 10:
             return {
-                "executor_count": 4,
+                "executor_count": 2,  # Reduced to fit in available nodes
                 "executor_memory": "4g",
                 "driver_memory": "4g",
                 "batch_vcpu": 4,
                 "batch_memory_gb": 16,
             }
-        else:  # scale_factor >= 100
-            return {
-                "executor_count": 8,
-                "executor_memory": "8g",
-                "driver_memory": "4g",
-                "batch_vcpu": 8,
-                "batch_memory_gb": 32,
-            }
+        # scale_factor >= 100
+        return {
+            "executor_count": 8,
+            "executor_memory": "8g",
+            "driver_memory": "4g",
+            "batch_vcpu": 8,
+            "batch_memory_gb": 32,
+        }
 
     def _create_spark_application_manifest(
         self,
@@ -356,7 +356,7 @@ class JobOrchestrator:
         """
         # Get resource configuration for this scale factor
         resources = self._get_resource_config(scale_factor)
-        
+
         executor_count = resources["executor_count"]
         executor_memory = resources["executor_memory"]
         driver_memory = resources["driver_memory"]
