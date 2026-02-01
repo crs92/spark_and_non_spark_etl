@@ -98,7 +98,7 @@ module "s3" {
 module "ecr" {
   source = "./modules/ecr"
 
-  repositories = ["spark-etl", "polars-etl"]
+  repositories = ["spark-etl", "polars-etl", "polars-tpch-etl"]
   environment  = var.environment
 }
 
