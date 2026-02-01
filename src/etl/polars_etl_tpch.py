@@ -665,7 +665,10 @@ def main():
         description="Polars + DuckDB ETL for TPC-H Benchmark"
     )
     parser.add_argument(
-        "--scale-factor", type=int, default=10, help="TPC-H scale factor (10 or 100)"
+        "--scale-factor",
+        type=int,
+        default=int(os.getenv("SCALE_FACTOR", "10")),
+        help="TPC-H scale factor (10 or 100)",
     )
     parser.add_argument(
         "--output", type=str, default="/tmp/output", help="Local output path"
@@ -673,31 +676,62 @@ def main():
     parser.add_argument(
         "--s3-input",
         type=str,
-        required=True,
+        required=False,  # Not required if env var is set
+        default=None,
         help="S3 path to TPC-H data (e.g., s3://bucket/tpch-sf10/)",
     )
     parser.add_argument(
         "--s3-output",
         type=str,
-        required=True,
+        required=False,  # Not required if env var is set
+        default=None,
         help="S3 path for results (e.g., s3://bucket/results/)",
     )
     args = parser.parse_args()
+
+    # Fallback to environment variables if arguments not provided
+    s3_bucket = os.getenv("S3_BUCKET", "")
+    s3_input_prefix = os.getenv("S3_INPUT_PREFIX", "")
+    s3_output_prefix = os.getenv("S3_OUTPUT_PREFIX", "")
+
+    # Determine S3 input path
+    if args.s3_input:
+        s3_input = args.s3_input
+    elif s3_bucket and s3_input_prefix:
+        s3_input = f"s3://{s3_bucket}/{s3_input_prefix}"
+    else:
+        logger.error(
+            "S3 input path not provided via --s3-input or environment variables"
+        )
+        logger.error("Required: --s3-input OR (S3_BUCKET + S3_INPUT_PREFIX env vars)")
+        sys.exit(1)
+
+    # Determine S3 output path
+    if args.s3_output:
+        s3_output = args.s3_output
+    elif s3_bucket and s3_output_prefix:
+        s3_output = f"s3://{s3_bucket}/{s3_output_prefix}"
+    else:
+        logger.error(
+            "S3 output path not provided via --s3-output or environment variables"
+        )
+        logger.error("Required: --s3-output OR (S3_BUCKET + S3_OUTPUT_PREFIX env vars)")
+        sys.exit(1)
 
     logger.info("=" * 60)
     logger.info("Polars + DuckDB TPC-H ETL - AWS Batch Mode")
     logger.info("=" * 60)
     logger.info("Scale Factor: %d", args.scale_factor)
-    logger.info("S3 Input: %s", args.s3_input)
-    logger.info("S3 Output: %s", args.s3_output)
+    logger.info("S3 Input: %s", s3_input)
+    logger.info("S3 Output: %s", s3_output)
     logger.info("Local Output: %s", args.output)
     logger.info("=" * 60)
 
     try:
         # Initialize ETL job
         etl = PolarsETLTPCH(
-            s3_input_path=args.s3_input,
-            s3_output_path=args.s3_output,
+            s3_input_path=s3_input,
+            s3_output_path=s3_output,
             scale_factor=args.scale_factor,
             local_output_path=args.output,
         )
