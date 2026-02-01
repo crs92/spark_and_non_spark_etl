@@ -68,7 +68,9 @@ resource "aws_iam_role_policy" "batch_job_s3_policy" {
         ]
         Resource = [
           module.s3.bucket_arn,
-          "${module.s3.bucket_arn}/*"
+          "${module.s3.bucket_arn}/*",
+          "arn:aws:s3:::ccorsetti",
+          "arn:aws:s3:::ccorsetti/*"
         ]
       }
     ]
