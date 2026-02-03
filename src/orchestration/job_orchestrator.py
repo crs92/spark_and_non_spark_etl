@@ -303,7 +303,7 @@ class JobOrchestrator:
         """Get resource configuration based on scale factor.
 
         Returns matching resources for both Spark and Batch to ensure fair comparison.
-        With m6i.xlarge nodes (4 vCPU, 16GB), we can run larger jobs.
+        With m6i.2xlarge nodes (8 vCPU, 32GB), Spark can run efficiently.
 
         Args:
             scale_factor: TPC-H scale factor
@@ -321,7 +321,7 @@ class JobOrchestrator:
             }
         if scale_factor <= 10:
             return {
-                "executor_count": 4,  # 4 executors fit in m6i.xlarge nodes
+                "executor_count": 4,  # Can fit comfortably in m6i.2xlarge
                 "executor_memory": "4g",
                 "driver_memory": "4g",
                 "batch_vcpu": 4,
@@ -329,11 +329,11 @@ class JobOrchestrator:
             }
         # scale_factor >= 100
         return {
-            "executor_count": 8,
-            "executor_memory": "8g",
+            "executor_count": 6,  # 6 executors for better parallelism
+            "executor_memory": "4g",
             "driver_memory": "4g",
-            "batch_vcpu": 8,
-            "batch_memory_gb": 32,
+            "batch_vcpu": 8,  # Match Spark total resources
+            "batch_memory_gb": 32,  # Valid for 8 vCPU on Fargate (16-60GB range)
         }
 
     def _create_spark_application_manifest(
@@ -930,7 +930,7 @@ class JobOrchestrator:
             try:
                 # Construct S3 key for metrics file
                 # Expected format: s3://bucket/metrics/{job_name}/metrics.json
-                metrics_key = f"{self.s3_metrics_prefix}/{metric.job_name}/metrics.json"
+                metrics_key = f"{self.s3_metrics_prefix}/results/polars/{metric.job_name}/metrics.json"
 
                 logger.debug(
                     f"Downloading metrics for {metric.job_name} from "
