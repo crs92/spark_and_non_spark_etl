@@ -1,0 +1,26 @@
+batch_cloudwatch_log_group = "/aws/batch/etl-benchmark-cluster-polars-tpch"
+batch_job_definition_arn = "arn:aws:batch:eu-central-1:764738119924:job-definition/etl-benchmark-cluster-polars-tpch:7"
+batch_job_queue_arn = "arn:aws:batch:eu-central-1:764738119924:job-queue/etl-benchmark-cluster-polars-queue"
+batch_job_queue_name = "etl-benchmark-cluster-polars-queue"
+batch_job_role_arn = "arn:aws:iam::764738119924:role/etl-benchmark-cluster-batch-job-role"
+cluster_endpoint = "https://107A302BC69D1288FBA294B412843FDC.gr7.eu-central-1.eks.amazonaws.com"
+cluster_name = "etl-benchmark-cluster"
+cluster_security_group_id = "sg-0a2aa3b77d5dce3fb"
+configure_kubectl = "aws eks update-kubeconfig --region eu-central-1 --name etl-benchmark-cluster"
+ec2_cloudwatch_log_group = "/aws/ec2/etl-benchmark-cluster-polars-etl"
+ec2_iam_role_arn = "arn:aws:iam::764738119924:role/etl-benchmark-cluster-polars-ec2-20260202080933575600000001"
+ec2_ssh_command = "No SSH key configured"
+ecr_repository_urls = {
+  "polars-tpch-etl" = "764738119924.dkr.ecr.eu-central-1.amazonaws.com/polars-tpch-etl"
+  "spark-etl" = "764738119924.dkr.ecr.eu-central-1.amazonaws.com/spark-etl"
+}
+polars_service_account_role_arn = "arn:aws:iam::764738119924:role/etl-benchmark-cluster-polars-sa-role"
+private_subnet_ids = [
+  "subnet-0bc5b221cc5604195",
+  "subnet-09c35dbd8d6a9f085",
+  "subnet-0796af339ea1b90a0",
+]
+s3_bucket_arn = "arn:aws:s3:::ccorsetti"
+s3_bucket_name = "ccorsetti"
+spark_service_account_role_arn = "arn:aws:iam::764738119924:role/etl-benchmark-cluster-spark-sa-role"
+vpc_id = "vpc-0dacc50904d35f086"

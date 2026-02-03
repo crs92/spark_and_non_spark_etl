@@ -1,0 +1,247 @@
+{
+  "timestamp": "2026-02-02T18:24:03.358463",
+  "total_jobs": 10,
+  "jobs": [
+    {
+      "job_id": "41b4bdce-4433-43fb-8305-d6aa66680d2d",
+      "job_type": "spark",
+      "job_name": "spark-tpch-sf100-20260202-173627-000",
+      "platform": "eks",
+      "created_at": "2026-02-02T17:36:27.849284",
+      "started_at": "2026-02-02T17:36:38.579439",
+      "completed_at": "2026-02-02T17:49:15.578454",
+      "startup_latency_seconds": 10.730155,
+      "execution_time_seconds": 756.999015,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    },
+    {
+      "job_id": "c6ed22d7-3ebc-46d0-b839-e289ec6e7001",
+      "job_type": "spark",
+      "job_name": "spark-tpch-sf100-20260202-173628-001",
+      "platform": "eks",
+      "created_at": "2026-02-02T17:36:28.537807",
+      "started_at": "2026-02-02T17:36:38.608580",
+      "completed_at": "2026-02-02T17:59:32.709642",
+      "startup_latency_seconds": 10.070773,
+      "execution_time_seconds": 1374.101062,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    },
+    {
+      "job_id": "25330af2-c4c4-4069-b1b0-bd6aa5d9666c",
+      "job_type": "spark",
+      "job_name": "spark-tpch-sf100-20260202-173629-002",
+      "platform": "eks",
+      "created_at": "2026-02-02T17:36:29.071168",
+      "started_at": "2026-02-02T17:36:38.673796",
+      "completed_at": "2026-02-02T18:09:51.347415",
+      "startup_latency_seconds": 9.602628,
+      "execution_time_seconds": 1992.673619,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    },
+    {
+      "job_id": "d65f57db-842b-472c-9032-8bf18c2dd665",
+      "job_type": "spark",
+      "job_name": "spark-tpch-sf100-20260202-173629-003",
+      "platform": "eks",
+      "created_at": "2026-02-02T17:36:29.602803",
+      "started_at": "2026-02-02T17:36:38.708752",
+      "completed_at": "2026-02-02T18:18:19.014802",
+      "startup_latency_seconds": 9.105949,
+      "execution_time_seconds": 2500.30605,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    },
+    {
+      "job_id": "9b833662-b523-45f9-9bc6-f4d2aba63365",
+      "job_type": "spark",
+      "job_name": "spark-tpch-sf100-20260202-173630-004",
+      "platform": "eks",
+      "created_at": "2026-02-02T17:36:30.135949",
+      "started_at": "2026-02-02T17:36:38.744879",
+      "completed_at": "2026-02-02T18:23:57.815010",
+      "startup_latency_seconds": 8.60893,
+      "execution_time_seconds": 2839.070131,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    },
+    {
+      "job_id": "1ce6aa9b-4fa2-46f5-8df0-1c160d49ebab",
+      "job_type": "polars",
+      "job_name": "polars-tpch-sf100-20260202-173630-000",
+      "platform": "batch",
+      "created_at": "2026-02-02T17:36:30.172258",
+      "started_at": "2026-02-02T17:37:07.980841",
+      "completed_at": "2026-02-02T17:40:16.845859",
+      "startup_latency_seconds": 37.808583,
+      "execution_time_seconds": 188.865018,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    },
+    {
+      "job_id": "3cf7da95-968a-4366-9610-645e0c054021",
+      "job_type": "polars",
+      "job_name": "polars-tpch-sf100-20260202-173630-001",
+      "platform": "batch",
+      "created_at": "2026-02-02T17:36:30.940583",
+      "started_at": "2026-02-02T17:37:08.214788",
+      "completed_at": "2026-02-02T17:40:16.921867",
+      "startup_latency_seconds": 37.274205,
+      "execution_time_seconds": 188.707079,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    },
+    {
+      "job_id": "473b31c4-f0c0-4268-8862-891519a38ec2",
+      "job_type": "polars",
+      "job_name": "polars-tpch-sf100-20260202-173631-002",
+      "platform": "batch",
+      "created_at": "2026-02-02T17:36:31.584007",
+      "started_at": "2026-02-02T17:37:08.449377",
+      "completed_at": "2026-02-02T17:40:16.991995",
+      "startup_latency_seconds": 36.86537,
+      "execution_time_seconds": 188.542618,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    },
+    {
+      "job_id": "fe9b6bab-3aa4-4e68-a5a0-745a6cd61595",
+      "job_type": "polars",
+      "job_name": "polars-tpch-sf100-20260202-173632-003",
+      "platform": "batch",
+      "created_at": "2026-02-02T17:36:32.218383",
+      "started_at": "2026-02-02T17:37:02.179888",
+      "completed_at": "2026-02-02T17:40:17.064687",
+      "startup_latency_seconds": 29.961505,
+      "execution_time_seconds": 194.884799,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    },
+    {
+      "job_id": "b1c55e25-3116-4312-81dd-899e2ed232c4",
+      "job_type": "polars",
+      "job_name": "polars-tpch-sf100-20260202-173632-004",
+      "platform": "batch",
+      "created_at": "2026-02-02T17:36:32.870598",
+      "started_at": "2026-02-02T17:37:08.906645",
+      "completed_at": "2026-02-02T17:40:17.130540",
+      "startup_latency_seconds": 36.036047,
+      "execution_time_seconds": 188.223895,
+      "status": "SUCCEEDED",
+      "peak_memory_mb": null,
+      "bytes_read": null,
+      "bytes_written": null
+    }
+  ],
+  "summary": {
+    "by_type": {
+      "spark": {
+        "count": 5,
+        "succeeded": 5,
+        "failed": 0,
+        "startup_latency": {
+          "mean": 9.623687,
+          "min": 8.60893,
+          "max": 10.730155,
+          "count": 5
+        },
+        "execution_time": {
+          "mean": 1892.6299754,
+          "min": 756.999015,
+          "max": 2839.070131,
+          "count": 5
+        }
+      },
+      "polars": {
+        "count": 5,
+        "succeeded": 5,
+        "failed": 0,
+        "startup_latency": {
+          "mean": 35.589141999999995,
+          "min": 29.961505,
+          "max": 37.808583,
+          "count": 5
+        },
+        "execution_time": {
+          "mean": 189.8446818,
+          "min": 188.223895,
+          "max": 194.884799,
+          "count": 5
+        }
+      }
+    },
+    "by_platform": {
+      "eks": {
+        "count": 5,
+        "succeeded": 5,
+        "failed": 0,
+        "startup_latency": {
+          "mean": 9.623687,
+          "min": 8.60893,
+          "max": 10.730155,
+          "count": 5
+        },
+        "execution_time": {
+          "mean": 1892.6299754,
+          "min": 756.999015,
+          "max": 2839.070131,
+          "count": 5
+        }
+      },
+      "batch": {
+        "count": 5,
+        "succeeded": 5,
+        "failed": 0,
+        "startup_latency": {
+          "mean": 35.589141999999995,
+          "min": 29.961505,
+          "max": 37.808583,
+          "count": 5
+        },
+        "execution_time": {
+          "mean": 189.8446818,
+          "min": 188.223895,
+          "max": 194.884799,
+          "count": 5
+        }
+      }
+    },
+    "overall": {
+      "count": 10,
+      "succeeded": 10,
+      "failed": 0,
+      "startup_latency": {
+        "mean": 22.6064145,
+        "min": 8.60893,
+        "max": 37.808583,
+        "count": 10
+      },
+      "execution_time": {
+        "mean": 1041.2373286,
+        "min": 188.223895,
+        "max": 2839.070131,
+        "count": 10
+      }
+    }
+  }
+}

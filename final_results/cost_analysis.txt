@@ -1,0 +1,104 @@
+================================================================================
+TPC-H Benchmark Cost Analysis
+================================================================================
+
+Pricing (eu-central-1):
+  EKS Control Plane: $0.10/hour
+  m6i.2xlarge: $0.46/hour
+  Fargate vCPU: $0.04656/hour
+  Fargate Memory: $0.00511/GB/hour
+
+================================================================================
+Cost Analysis - Scale Factor 1 (~1GB)
+================================================================================
+
+Spark (EKS):
+  Total Jobs: 2
+  Total Cost: $0.0751
+  Avg Cost per Job: $0.0376
+  Cost per GB: $0.0376
+  Avg Duration: 0.02 hours
+
+Polars (AWS Batch):
+  Total Jobs: 2
+  Total Cost: $0.0280
+  Avg Cost per Job: $0.0140
+  Cost per GB: $0.0140
+  Avg Duration: 0.02 hours
+
+Comparison:
+  Spark is 2.7x more expensive
+  Polars saves 62.7% in compute costs
+
+Monthly Projection (100 jobs/month):
+  Spark: $3.76/month
+  Polars: $1.40/month
+  Savings: $2.36/month ($28.27/year)
+
+================================================================================
+Cost Analysis - Scale Factor 10 (~10GB)
+================================================================================
+
+Spark (EKS):
+  Total Jobs: 10
+  Total Cost: $2.3585
+  Avg Cost per Job: $0.2358
+  Cost per GB: $0.0236
+  Avg Duration: 0.18 hours
+
+Polars (AWS Batch):
+  Total Jobs: 10
+  Total Cost: $0.1625
+  Avg Cost per Job: $0.0162
+  Cost per GB: $0.0016
+  Avg Duration: 0.02 hours
+
+Comparison:
+  Spark is 14.5x more expensive
+  Polars saves 93.1% in compute costs
+
+Monthly Projection (100 jobs/month):
+  Spark: $23.58/month
+  Polars: $1.62/month
+  Savings: $21.96/month ($263.52/year)
+
+================================================================================
+Cost Analysis - Scale Factor 100 (~100GB)
+================================================================================
+
+Spark (EKS):
+  Total Jobs: 5
+  Total Cost: $3.3578
+  Avg Cost per Job: $0.6716
+  Cost per GB: $0.0067
+  Avg Duration: 0.53 hours
+
+Polars (AWS Batch):
+  Total Jobs: 5
+  Total Cost: $0.2178
+  Avg Cost per Job: $0.0436
+  Cost per GB: $0.0004
+  Avg Duration: 0.06 hours
+
+Comparison:
+  Spark is 15.4x more expensive
+  Polars saves 93.5% in compute costs
+
+Monthly Projection (100 jobs/month):
+  Spark: $67.16/month
+  Polars: $4.36/month
+  Savings: $62.80/month ($753.60/year)
+
+================================================================================
+Overall Cost Summary
+================================================================================
+
+Total Benchmark Costs:
+  Spark: $5.79
+  Polars: $0.41
+  Savings: $5.38 (92.9%)
+
+================================================================================
+Cost analysis complete!
+================================================================================
+
